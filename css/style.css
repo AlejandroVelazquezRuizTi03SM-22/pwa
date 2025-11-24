@@ -2,32 +2,16 @@
 body { font-family: sans-serif; margin: 0; background-color: #F5F5F5; color: #333; line-height: 1.6; padding-bottom: 80px; }
 
 header { 
-    background-color: #1A237E; 
-    color: white; 
-    padding: 15px 20px; 
-    text-align: center; 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-    position: sticky; 
-    top: 0;
-    z-index: 1000;
+    background-color: #1A237E; color: white; padding: 15px 20px; text-align: center; 
+    display: flex; justify-content: space-between; align-items: center; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 1000;
 }
 
 .header-logo { height: 40px; margin-right: 15px; filter: brightness(0) invert(1); }
 header h1 { display: flex; align-items: center; font-size: 1.3em; margin: 0; }
 
 nav { display: flex; gap: 5px; }
-
-nav a { 
-    color: white; 
-    text-decoration: none; 
-    padding: 8px 12px; 
-    border-radius: 4px; 
-    font-size: 0.9em;
-    white-space: nowrap; 
-}
+nav a { color: white; text-decoration: none; padding: 8px 12px; border-radius: 4px; font-size: 0.9em; white-space: nowrap; }
 nav a:hover { background-color: #3f51b5; }
 
 main { padding: 20px; max-width: 1200px; margin: 0 auto; }
@@ -35,18 +19,27 @@ h2 { color: #1A237E; border-bottom: 2px solid #009688; padding-bottom: 10px; mar
 
 /* --- INDICADOR DE CONEXIÓN --- */
 .toast {
-    position: fixed; top: 60px; 
-    left: 0; width: 100%; 
-    background-color: #D32F2F; color: white; 
-    text-align: center; padding: 10px; z-index: 999;
-    font-weight: bold; transition: transform 0.3s ease-in-out;
+    position: fixed; top: 60px; left: 0; width: 100%; background-color: #D32F2F; color: white; 
+    text-align: center; padding: 10px; z-index: 999; font-weight: bold; transition: transform 0.3s ease-in-out;
 }
 .toast.hidden { transform: translateY(-200%); }
 .toast.online { background-color: #388E3C; }
 
 /* --- LOGIN --- */
-#login-container { max-width: 400px; margin: 40px auto; padding: 30px; background: white; border-radius: 10px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-#login-container button { background-color: #009688; color: white; border: none; padding: 12px 25px; margin: 10px; font-size: 16px; cursor: pointer; border-radius: 5px; width: 100%; }
+#login-container { max-width: 400px; margin: 40px auto; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+.login-subtitle { color: #666; margin-bottom: 30px; }
+.login-card { padding: 15px; margin-bottom: 15px; }
+.login-input { width: 90%; padding: 12px; font-size: 1.1em; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 10px; text-align: center; }
+.login-input:focus { border-color: #1A237E; outline: none; }
+.btn-login { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1em; font-weight: bold; cursor: pointer; color: white; }
+.btn-login.student { background-color: #009688; }
+.btn-login.admin { background-color: #1A237E; }
+.login-divider { border: 0; border-top: 1px dashed #ccc; margin: 20px 0; }
+
+/* --- QUITAR FLECHAS DE NÚMERO --- */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
 
 /* --- BUSCADOR --- */
 .search-input { width: 100%; padding: 15px; font-size: 1.1em; border: 2px solid #1A237E; border-radius: 25px; margin-bottom: 20px; box-sizing: border-box; }
@@ -71,18 +64,6 @@ input, textarea, select { width: 100%; padding: 10px; margin: 5px 0 15px; border
 .btn-primary { background-color: #1A237E; color: white; width: 100%; padding: 12px; border: none; cursor: pointer; font-size: 1.1em; border-radius: 5px; }
 .btn-secondary { background-color: white; color: #1A237E; border: 2px solid #1A237E; width: 100%; padding: 10px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 10px; }
 
-/* --- QUITAR FLECHAS DE NÚMERO (NUEVO) --- */
-/* Chrome, Safari, Edge, Opera */
-input[type=number]::-webkit-outer-spin-button,
-input[type=number]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-/* Firefox */
-input[type=number] {
-  -moz-appearance: textfield;
-}
-
 /* --- GRID SOLICITUD --- */
 .request-container { display: grid; gap: 20px; }
 @media(min-width: 768px) { .request-container { grid-template-columns: 1fr 1fr; } }
@@ -104,7 +85,6 @@ input[type=number] {
 .history-card { border-left: 5px solid #009688; padding-left: 15px; }
 .history-card ul { padding-left: 20px; margin: 5px 0; color: #555; }
 
-/* --- DASHBOARD GRÁFICAS --- */
 .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-bottom: 20px; }
 .kpi-card { background: white; padding: 15px; border-radius: 8px; text-align: center; border-bottom: 4px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 .kpi-card.highlight { border-bottom-color: #009688; }
@@ -117,32 +97,9 @@ input[type=number] {
 
 /* --- RESPONSIVE (MÓVIL) --- */
 @media (max-width: 600px) {
-    header {
-        flex-direction: column; 
-        padding: 10px;
-    }
-    
-    header h1 {
-        margin-bottom: 10px;
-        font-size: 1.2em;
-    }
-
-    nav {
-        width: 100%;
-        justify-content: center; 
-        flex-wrap: wrap; 
-        gap: 5px;
-    }
-
-    nav a {
-        background-color: rgba(255,255,255,0.1); 
-        padding: 8px 10px;
-        font-size: 0.85em;
-        flex-grow: 1; 
-        text-align: center;
-    }
-
-    .toast {
-        top: 100px; 
-    }
+    header { flex-direction: column; padding: 10px; }
+    header h1 { margin-bottom: 10px; font-size: 1.2em; }
+    nav { width: 100%; justify-content: center; flex-wrap: wrap; gap: 5px; }
+    nav a { background-color: rgba(255,255,255,0.1); padding: 8px 10px; font-size: 0.85em; flex-grow: 1; text-align: center; }
+    .toast { top: 100px; }
 }

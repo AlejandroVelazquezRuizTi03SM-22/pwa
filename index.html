@@ -5,19 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniStock PWA | Inventario UTSJR</title>
     
-    <!-- MANIFIESTO -->
+    <!-- MANIFIESTO Y TEMA VISUAL -->
     <link rel="manifest" href="./manifest.json">
-    
-    <!-- ICONOS Y FAVICONS (Solución al error de consola) -->
-    <!-- El navegador busca icon.png para la pestaña y accesos directos -->
     <link rel="icon" type="image/png" href="./images/icon.png">
-    <link rel="apple-touch-icon" href="./images/icon.png">
-    
     <meta name="theme-color" content="#1A237E"> 
     
     <!-- ESTILOS -->
     <link rel="stylesheet" href="./css/style.css">
     
+    <!-- LIBRERÍA QR (Para modo offline) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+
     <!-- FIREBASE SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -42,18 +40,18 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
+                // Exponer funciones a la app global
                 window.db = db;
                 window.auth = auth;
                 window.firebase = { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc }; 
                 
-                // Autenticación Anónima (Solución al error 400 si está habilitada en consola)
                 await signInAnonymously(auth);
                 console.log("✅ Conectado a Firebase");
                 
                 if (typeof window.initApp === 'function') window.initApp();
 
             } catch (error) {
-                console.log("⚠️ Modo Offline activo (o error de auth)");
+                console.log("⚠️ Modo Offline activo");
                 if (typeof window.initApp === 'function') window.initApp();
             }
         };
@@ -69,12 +67,11 @@
     </header>
     
     <main id="content">
-        <!-- VISTA DE LOGIN MEJORADA -->
+        <!-- VISTA DE LOGIN (CON INPUTS) -->
         <div id="login-container">
             <h2>Bienvenido a UniStock</h2>
             <p class="login-subtitle">Sistema de Inventario UTSJR</p>
             
-            <!-- SECCIÓN ALUMNO -->
             <div class="login-card student-login">
                 <h3>👨‍🎓 Acceso Alumno</h3>
                 <input type="number" id="login-student-id" placeholder="Ingresa tu Matrícula" class="login-input">
@@ -83,7 +80,6 @@
 
             <hr class="login-divider">
 
-            <!-- SECCIÓN ADMIN -->
             <div class="login-card admin-login">
                 <h3>🛡️ Acceso Almacén</h3>
                 <input type="password" id="login-admin-pass" placeholder="Contraseña Admin" class="login-input">
