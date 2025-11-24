@@ -7,6 +7,12 @@
     
     <!-- MANIFIESTO -->
     <link rel="manifest" href="./manifest.json">
+    
+    <!-- ICONOS Y FAVICONS (Solución al error de consola) -->
+    <!-- El navegador busca icon.png para la pestaña y accesos directos -->
+    <link rel="icon" type="image/png" href="./images/icon.png">
+    <link rel="apple-touch-icon" href="./images/icon.png">
+    
     <meta name="theme-color" content="#1A237E"> 
     
     <!-- ESTILOS -->
@@ -40,13 +46,14 @@
                 window.auth = auth;
                 window.firebase = { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc }; 
                 
+                // Autenticación Anónima (Solución al error 400 si está habilitada en consola)
                 await signInAnonymously(auth);
                 console.log("✅ Conectado a Firebase");
                 
                 if (typeof window.initApp === 'function') window.initApp();
 
             } catch (error) {
-                console.log("⚠️ Modo Offline activo (Sin conexión a Firebase)");
+                console.log("⚠️ Modo Offline activo (o error de auth)");
                 if (typeof window.initApp === 'function') window.initApp();
             }
         };
@@ -57,12 +64,12 @@
     <div id="connection-toast" class="toast hidden">🔴 Sin Conexión - Modo Offline</div>
 
     <header>
-        <h1><img src="./images/utsjr.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
+        <h1><img src="./images/utsjr_logo.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
         <nav id="app-nav"></nav>
     </header>
     
     <main id="content">
-        <!-- VISTA DE LOGIN MEJORADA (Inputs en pantalla) -->
+        <!-- VISTA DE LOGIN MEJORADA -->
         <div id="login-container">
             <h2>Bienvenido a UniStock</h2>
             <p class="login-subtitle">Sistema de Inventario UTSJR</p>
