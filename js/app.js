@@ -1,142 +1,189 @@
-// --------------------------------------------------------------------------------
-// 1. VARIABLES GLOBALES Y CONFIGURACIÓN
-// --------------------------------------------------------------------------------
+/**
+ * UNISTOCK PWA - ARCHIVO PRINCIPAL DE LÓGICA
+ * Autor: Alejandro Velázquez Ruiz
+ * Universidad Tecnológica de San Juan del Río
+ * Materia: Aplicaciones Web Progresivas
+ */
+
+// =========================================================
+// 1. VARIABLES GLOBALES Y REFERENCIAS DOM
+// =========================================================
 const mainContent = document.getElementById('content');
+const appNav = document.getElementById('app-nav');
+const connectionToast = document.getElementById('connection-toast');
+
+// Estado de la sesión
 let currentUserRole = null; 
-// Mantenemos la matrícula en memoria para no pedirla a cada rato
 let currentStudentId = localStorage.getItem('student_id') || '';
 
-// Claves para el almacenamiento local (Offline)
+// Claves para almacenamiento local (LocalStorage)
 const INVENTORY_KEY = 'unistock_inventory';
 const CART_KEY = 'unistock_loan_cart';
+const PENDING_REQUESTS_KEY = 'unistock_pending_requests';
 
-// --------------------------------------------------------------------------------
-// 2. INDICADOR DE CONEXIÓN
-// --------------------------------------------------------------------------------
+// =========================================================
+// 2. GESTIÓN DE CONECTIVIDAD (ONLINE/OFFLINE)
+// =========================================================
+
+/**
+ * Actualiza la barra visual de estado de conexión.
+ * Se ejecuta al cargar la app y cuando cambia el estado de red.
+ */
 function updateConnectionStatus() {
-    const toast = document.getElementById('connection-toast');
-    if(!toast) return; // Protección si el elemento no existe aún
+    if (!connectionToast) return;
 
     if (navigator.onLine) {
-        toast.textContent = "🟢 Conexión Restablecida";
-        toast.classList.add('online');
-        toast.classList.remove('hidden');
-        setTimeout(() => toast.classList.add('hidden'), 3000);
+        // Estamos en línea
+        connectionToast.textContent = "🟢 Conexión Restablecida - Sincronizando...";
+        connectionToast.classList.add('online');
+        connectionToast.classList.remove('hidden');
+        
+        // Ocultar después de 3 segundos
+        setTimeout(() => {
+            connectionToast.classList.add('hidden');
+        }, 3000);
+        
+        // Intento de resincronización silenciosa
+        getInventory(); 
     } else {
-        toast.textContent = "🔴 Sin Conexión - Modo Offline";
-        toast.classList.remove('online');
-        toast.classList.remove('hidden');
+        // Estamos sin conexión
+        connectionToast.textContent = "🔴 Sin Conexión - Modo Offline Activo";
+        connectionToast.classList.remove('online');
+        connectionToast.classList.remove('hidden');
     }
 }
 
+// Escuchadores de eventos de red
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
-// --------------------------------------------------------------------------------
-// 3. GESTIÓN DE INVENTARIO (HÍBRIDO: NUBE + LOCAL)
-// --------------------------------------------------------------------------------
+
+// =========================================================
+// 3. GESTIÓN DE INVENTARIO (MODELO HÍBRIDO)
+// =========================================================
 
 /**
- * Obtiene el inventario. 
- * Prioridad 1: Firestore (Si hay internet). Sincroniza y guarda en local.
- * Prioridad 2: LocalStorage (Si no hay internet).
+ * Obtiene la lista de materiales.
+ * Estrategia: Network First, falling back to Cache.
+ * Si hay internet, baja de Firebase y actualiza el caché.
+ * Si no hay internet, lee del caché local.
  */
 const getInventory = async () => {
-    // Intentar conexión Online
+    // ESCENARIO 1: CONEXIÓN A FIREBASE (ONLINE)
     if (navigator.onLine && window.db && window.firebase) {
         try {
+            console.log("[Inventario] Intentando descargar de Firestore...");
             const { collection, getDocs } = window.firebase;
             const querySnapshot = await getDocs(collection(window.db, "inventory"));
+            
             const remoteData = [];
             querySnapshot.forEach((doc) => {
-                // Guardamos ID de Firestore y los datos
-                remoteData.push({ id: doc.id, ...doc.data() });
+                remoteData.push({ 
+                    id: doc.id, 
+                    ...doc.data() 
+                });
             });
             
-            // ÉXITO ONLINE: Actualizamos el respaldo local
-            saveInventory(remoteData);
-            console.log("Inventario sincronizado desde la Nube.");
+            // Guardar la versión fresca en LocalStorage para uso futuro offline
+            saveInventoryLocally(remoteData);
+            console.log(`[Inventario] ${remoteData.length} items sincronizados.`);
             return remoteData;
             
         } catch (error) { 
-            console.warn("Modo Offline activado: No se pudo conectar a Firestore.", error); 
+            console.warn("[Inventario] Error conectando a Firestore, usando caché:", error); 
         }
     }
     
-    // Fallback Offline
-    console.log("Cargando inventario desde caché local.");
-    const local = localStorage.getItem(INVENTORY_KEY);
+    // ESCENARIO 2: MODO OFFLINE (LOCALSTORAGE)
+    console.log("[Inventario] Cargando desde LocalStorage...");
+    const localData = localStorage.getItem(INVENTORY_KEY);
     
-    // Datos de respaldo por si es la primera vez que se abre la app y no hay internet
+    // Datos de respaldo (Seed Data) si es la primera vez absoluta
     const backupData = [
         { 
             id: "demo-1", 
             name: "Multímetro Digital (Demo)", 
-            description: "Equipo precargado para demostración offline.", 
+            description: "Equipo precargado para demostración cuando no hay internet ni caché.", 
             available: 10, 
             total: 10, 
             tags: ["Laboratorio", "Demo"] 
         }
     ];
     
-    return local ? JSON.parse(local) : backupData;
+    return localData ? JSON.parse(localData) : backupData;
 };
 
-const saveInventory = (data) => {
+/**
+ * Guarda el inventario en LocalStorage.
+ */
+const saveInventoryLocally = (data) => {
     localStorage.setItem(INVENTORY_KEY, JSON.stringify(data));
 };
 
-// --------------------------------------------------------------------------------
+
+// =========================================================
 // 4. GESTIÓN DEL CARRITO DE COMPRAS (LOCAL)
-// --------------------------------------------------------------------------------
+// =========================================================
 
 const getCart = () => {
-    const cart = localStorage.getItem(CART_KEY);
-    return cart ? JSON.parse(cart) : [];
+    const cartJSON = localStorage.getItem(CART_KEY);
+    return cartJSON ? JSON.parse(cartJSON) : [];
 };
 
 const saveCart = (cart) => { 
     localStorage.setItem(CART_KEY, JSON.stringify(cart)); 
-    updateCartUI(); // Actualiza el contador en la barra de navegación
+    updateCartUI(); // Actualizar el contador visual
 };
 
+/**
+ * Agrega un ítem al carrito validando existencias.
+ */
 const addToCart = async (id) => {
     const inventory = await getInventory();
     const product = inventory.find(p => p.id === id);
     
-    if(!product) return alert("Error: Producto no encontrado.");
+    if(!product) {
+        alert("Error: El producto seleccionado no se encuentra en la base de datos local.");
+        return;
+    }
 
     let cart = getCart();
-    let item = cart.find(i => i.id === id);
+    let itemInCart = cart.find(i => i.id === id);
 
-    if(item) {
-        // Validar que no pida más de lo que hay disponible
-        if(item.quantity < product.available) { 
-            item.quantity++; 
-            alert(`Cantidad actualizada: ${item.quantity} unidades.`); 
+    if(itemInCart) {
+        // Validar stock máximo
+        if(itemInCart.quantity < product.available) { 
+            itemInCart.quantity++; 
+            alert(`✅ Se añadió otra unidad. Tienes ${itemInCart.quantity} en la solicitud.`); 
         } else { 
-            alert(`Stock insuficiente. Solo hay ${product.available} disponibles.`); 
+            alert(`⚠️ Stock insuficiente. Solo hay ${product.available} unidades disponibles para préstamo.`); 
             return;
         }
     } else {
-        // Nuevo item en el carrito
+        // Nuevo ítem
         cart.push({ 
             id: product.id, 
             name: product.name, 
             quantity: 1, 
-            max: product.available // Guardamos el max para validaciones en el formulario
+            max: product.available 
         });
-        alert("Material agregado a la solicitud.");
+        alert(`✅ "${product.name}" agregado a la solicitud.`);
     }
     saveCart(cart);
 };
 
+/**
+ * Elimina un ítem del carrito.
+ */
 const removeFromCart = (id) => {
+    if(!confirm("¿Eliminar este artículo de la solicitud?")) return;
+    
     let cart = getCart().filter(i => i.id !== id);
     saveCart(cart);
-    // Si estamos en la vista del formulario, recargamos para reflejar cambios
-    // Verificamos si el elemento existe para evitar errores si estamos en otra vista
-    if(document.getElementById('loan-form')) {
+    
+    // Si estamos en la vista del formulario, recargar para reflejar cambios
+    const loanForm = document.getElementById('loan-form');
+    if(loanForm) {
         renderRequestForm();
     }
 };
@@ -146,169 +193,217 @@ const clearCart = () => {
     updateCartUI();
 };
 
-// --------------------------------------------------------------------------------
-// 5. SISTEMA DE LOGIN, NAVEGACIÓN Y PERFILES
-// --------------------------------------------------------------------------------
 
+// =========================================================
+// 5. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN
+// =========================================================
+
+/**
+ * Inicializa la aplicación al cargar la página.
+ */
 window.initApp = function() {
+    console.log("[App] Inicializando...");
     updateConnectionStatus();
-    // Verificar si ya hay una sesión guardada
-    if(localStorage.getItem('user_role')) {
-        currentUserRole = localStorage.getItem('user_role');
-        // Recuperamos matrícula guardada si es alumno
+    
+    // Recuperar sesión persistente
+    const storedRole = localStorage.getItem('user_role');
+    if(storedRole) {
+        currentUserRole = storedRole;
         currentStudentId = localStorage.getItem('student_id') || '';
+        console.log(`[Sesión] Usuario recuperado: ${currentUserRole}`);
         updateNav();
     }
 };
 
+/**
+ * Actualiza la barra de navegación según el rol.
+ */
 const updateNav = () => {
-    const nav = document.getElementById('app-nav');
-    if(!nav) return;
+    if(!appNav) return;
 
     if(currentUserRole === 'admin') {
-        nav.innerHTML = `
-            <a href="#" onclick="navigateTo('admin_dashboard')">Dashboard</a>
-            <a href="#" onclick="navigateTo('admin_inventory')">Inventario</a>
+        appNav.innerHTML = `
+            <a href="#" onclick="navigateTo('admin_dashboard')">📊 Dashboard</a>
+            <a href="#" onclick="navigateTo('admin_inventory')">📦 Inventario</a>
             <a href="#" onclick="navigateTo('admin_validate')">✅ Validar</a>
-            <a href="#" onclick="logout()">Salir</a>`;
-        // Redirigir al dashboard si acabamos de loguear y estamos en login
+            <a href="#" onclick="navigateTo('admin_active_loans')">🔄 Activos</a>
+            <a href="#" onclick="logout()" style="background-color:#D32F2F;">Salir</a>
+        `;
+        // Redirección automática si estamos en login
         if(document.getElementById('login-container')) navigateTo('admin_dashboard');
-    } else {
-        nav.innerHTML = `
-            <a href="#" onclick="navigateTo('student_consult')">Material</a>
-            <a href="#" onclick="navigateTo('student_request_form')">Solicitud (${getCart().length})</a>
+    } else if (currentUserRole === 'student') {
+        appNav.innerHTML = `
+            <a href="#" onclick="navigateTo('student_consult')">🔍 Material</a>
+            <a href="#" onclick="navigateTo('student_request_form')">🛒 Solicitud (${getCart().length})</a>
             <a href="#" onclick="navigateTo('student_history')">📜 Historial</a>
-            <a href="#" onclick="logout()">Salir</a>`;
+            <a href="#" onclick="logout()" style="background-color:#D32F2F;">Salir</a>
+        `;
         if(document.getElementById('login-container')) navigateTo('student_consult');
     }
 };
 
+/**
+ * Maneja el inicio de sesión desde los inputs HTML.
+ */
 window.login = (role) => {
-    // Lógica para tomar valores de los inputs en lugar de prompt (Versión Móvil Amigable)
+    // --- LOGIN ADMINISTRADOR ---
     if(role === 'admin') {
         const passInput = document.getElementById('login-admin-pass');
-        // Si no existen los inputs (por ejemplo, login desde consola), usamos prompt como fallback
-        if (!passInput) {
-             const pass = prompt("Ingrese Contraseña de Administrador:");
-             if(pass !== "utsjr2025") return alert("Contraseña Incorrecta.");
+        let password = '';
+
+        if (passInput) {
+             password = passInput.value;
         } else {
-             const password = passInput.value;
-             if(password !== "utsjr2025") {
-                alert("Contraseña Incorrecta");
-                return;
-             }
+             // Fallback por si el input no existe en el DOM
+             password = prompt("Ingrese Contraseña de Administrador:");
+        }
+
+        if(password !== "utsjr2025") {
+            alert("❌ Contraseña Incorrecta. Acceso Denegado.");
+            return;
         }
     }
     
+    // --- LOGIN ALUMNO ---
     if(role === 'student') {
         const idInput = document.getElementById('login-student-id');
         let matricula = '';
-        
-        if (!idInput) {
-             matricula = prompt("Por favor, ingresa tu Matrícula:", currentStudentId);
-             if (!matricula) return;
-        } else {
+
+        if (idInput) {
              matricula = idInput.value.trim();
-             if(!matricula) {
-                alert("Por favor ingresa tu matrícula");
-                return;
-             }
+        } else {
+             matricula = prompt("Por favor, ingresa tu Matrícula:", currentStudentId);
+        }
+        
+        if(!matricula || matricula.length < 3) {
+            alert("⚠️ Por favor ingresa una matrícula válida.");
+            return;
         }
         
         currentStudentId = matricula;
         localStorage.setItem('student_id', matricula);
     }
 
+    // Guardar sesión
     currentUserRole = role;
     localStorage.setItem('user_role', role);
     updateNav();
 };
 
 window.logout = () => {
-    currentUserRole = null;
-    localStorage.removeItem('user_role');
-    // No borramos student_id para comodidad del usuario en el futuro
-    location.reload(); // Recarga completa para limpiar memoria
-};
-
-// Router simple para SPA (Single Page Application)
-window.navigateTo = async (view) => {
-    // Indicador de carga simple
-    mainContent.innerHTML = '<div style="text-align:center; padding:50px; color:#666;"><h2>Cargando...</h2></div>';
-    
-    // Pequeño delay para dar sensación de proceso (opcional)
-    await new Promise(r => setTimeout(r, 50));
-
-    switch(view) {
-        // Vistas Alumno
-        case 'student_consult': 
-            await renderStudentConsultation(); 
-            break;
-        case 'student_request_form': 
-            renderRequestForm(); 
-            break;
-        case 'student_history': 
-            await renderStudentHistory(); 
-            break;
-            
-        // Vistas Admin
-        case 'admin_dashboard': 
-            renderAdminDashboard(); 
-            break;
-        case 'admin_inventory': 
-            await renderAdminInventory(); 
-            break;
-        case 'admin_validate': 
-            renderAdminValidate(); 
-            break;
-            
-        default: 
-            mainContent.innerHTML = "<h2>Error 404: Vista no encontrada</h2>";
+    if(confirm("¿Seguro que deseas cerrar sesión?")) {
+        currentUserRole = null;
+        localStorage.removeItem('user_role');
+        // No borramos student_id para comodidad del usuario
+        location.reload(); // Recarga limpia
     }
 };
 
-// --------------------------------------------------------------------------------
-// 6. VISTAS DEL ALUMNO
-// --------------------------------------------------------------------------------
+/**
+ * Router SPA (Single Page Application)
+ * Maneja el cambio de vistas sin recargar la página.
+ */
+window.navigateTo = async (view) => {
+    // Spinner de carga
+    mainContent.innerHTML = `
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:50px;">
+            <div style="border: 4px solid #f3f3f3; border-top: 4px solid #1A237E; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+            <p style="margin-top:15px; color:#666;">Cargando contenido...</p>
+            <style>@keyframes spin {0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);}}</style>
+        </div>
+    `;
+    
+    // Pequeño delay para UX (evita parpadeo instantáneo)
+    await new Promise(r => setTimeout(r, 100));
 
-// --- VISTA DE CONSULTA Y BÚSQUEDA ---
+    try {
+        switch(view) {
+            // --- VISTAS ALUMNO ---
+            case 'student_consult': 
+                await renderStudentConsultation(); 
+                break;
+            case 'student_request_form': 
+                renderRequestForm(); 
+                break;
+            case 'student_history': 
+                await renderStudentHistory(); 
+                break;
+                
+            // --- VISTAS ADMIN ---
+            case 'admin_dashboard': 
+                await renderAdminDashboard(); 
+                break;
+            case 'admin_inventory': 
+                await renderAdminInventory(); 
+                break;
+            case 'admin_validate': 
+                renderAdminValidate(); 
+                break;
+            case 'admin_active_loans': 
+                await renderAdminActiveLoans(); 
+                break;
+                
+            default: 
+                mainContent.innerHTML = "<h2>Error 404: Vista no encontrada</h2><button onclick='location.reload()'>Volver al Inicio</button>";
+        }
+    } catch (error) {
+        console.error("Error en navegación:", error);
+        mainContent.innerHTML = `<h2>Error al cargar la vista</h2><p>${error.message}</p>`;
+    }
+};
+
+
+// =========================================================
+// 6. LÓGICA DE VISTAS: ALUMNO
+// =========================================================
+
+/**
+ * Vista principal de consulta de material.
+ */
 const renderStudentConsultation = async () => {
     const items = await getInventory();
     
     mainContent.innerHTML = `
         <h2>Consulta de Material</h2>
+        
         <div class="search-container">
             <input type="text" id="search" class="search-input" placeholder="🔍 Buscar por nombre, carrera, etiqueta...">
         </div>
         
         <div id="list" class="inventory-list">
-            <!-- Aquí se inyectan las tarjetas -->
+            <!-- Renderizado dinámico -->
         </div>
         
         <!-- Botón Flotante (FAB) -->
         <button id="fab-cart" onclick="navigateTo('student_request_form')">
-            📋 Ver Solicitud
+            📋 Ver Solicitud (${getCart().length})
         </button>
     `;
 
     const drawList = (list) => {
         const container = document.getElementById('list');
-        if(list.length === 0) {
-            container.innerHTML = "<p style='grid-column: 1/-1; text-align:center;'>No se encontraron materiales que coincidan.</p>";
+        if(!list || list.length === 0) {
+            container.innerHTML = `
+                <div style="grid-column: 1/-1; text-align:center; padding:40px; color:#777;">
+                    <p>No se encontraron materiales con ese criterio.</p>
+                </div>`;
             return;
         }
+        
         container.innerHTML = list.map(i => `
             <div class="material-card">
                 <h3>${i.name}</h3>
-                <p class="desc">${i.description || ''}</p>
+                <p class="desc">${i.description || 'Sin descripción disponible.'}</p>
                 
                 <div class="tags-container">
                     ${i.tags ? i.tags.map(t=>`<span class="tag">${t}</span>`).join('') : ''}
                 </div>
                 
-                <p class="${i.available > 0 ? 'available-in-stock':'available-out-stock'}">
-                    Disponibles: <strong>${i.available}</strong> / ${i.total}
-                </p>
+                <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <span class="${i.available > 0 ? 'available-in-stock':'available-out-stock'}">
+                        Disp: <strong>${i.available}</strong> / ${i.total}
+                    </span>
+                </div>
                 
                 ${i.available > 0 ? 
                     `<button onclick="addToCart('${i.id}')">Agregar a Solicitud</button>` : 
@@ -316,78 +411,86 @@ const renderStudentConsultation = async () => {
             </div>`).join('');
     };
 
-    // Render inicial
+    // Carga inicial
     drawList(items);
 
-    // Lógica de Buscador en tiempo real
-    document.getElementById('search').addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase();
-        const filtered = items.filter(i => 
-            i.name.toLowerCase().includes(q) || 
-            (i.tags && i.tags.some(t => t.toLowerCase().includes(q)))
-        );
-        drawList(filtered);
-    });
+    // Evento de búsqueda en tiempo real
+    const searchInput = document.getElementById('search');
+    if(searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase();
+            const filtered = items.filter(i => 
+                (i.name && i.name.toLowerCase().includes(q)) || 
+                (i.tags && i.tags.some(t => t.toLowerCase().includes(q)))
+            );
+            drawList(filtered);
+        });
+    }
     
     updateCartUI();
 };
 
 const updateCartUI = () => {
+    // Actualizar texto del botón del menú
     const links = document.querySelectorAll('nav a');
-    // Actualizar texto del botón del menú si estamos en modo alumno
     if(links.length > 1 && currentUserRole === 'student') {
         links[1].innerText = `Solicitud (${getCart().length})`;
     }
+    // Actualizar botón flotante si existe
+    const fab = document.getElementById('fab-cart');
+    if(fab) fab.innerText = `📋 Ver Solicitud (${getCart().length})`;
 };
 
-// --- VISTA DE FORMULARIO DETALLADO (PAPEL DIGITAL) ---
+/**
+ * Vista de Formulario de Préstamo (Carrito + Datos).
+ */
 const renderRequestForm = () => {
     const cart = getCart();
     
     if(cart.length === 0) {
         mainContent.innerHTML = `
-            <div style="text-align:center; margin-top:50px;">
+            <div style="text-align:center; margin-top:50px; padding:20px;">
+                <h2 style="color:#ccc; font-size:3em;">🛒</h2>
                 <h2>Tu solicitud está vacía</h2>
                 <p>Regresa al inventario para seleccionar materiales.</p>
-                <button class="btn-primary" onclick="navigateTo('student_consult')" style="width:auto;">Ir al Inventario</button>
+                <button class="btn-primary" onclick="navigateTo('student_consult')" style="width:auto; margin-top:20px;">Ir al Inventario</button>
             </div>
         `;
         return;
     }
     
-    // Pre-llenar fecha con hoy
     const today = new Date().toISOString().split('T')[0];
 
     mainContent.innerHTML = `
         <h2>Completar Solicitud de Préstamo</h2>
         
         <div class="request-container">
-            <!-- COLUMNA 1: LISTA DE MATERIALES -->
+            <!-- Columna 1: Lista de Materiales -->
             <div class="cart-section">
                 <h3>1. Materiales Seleccionados</h3>
                 <ul style="list-style:none; padding:0;">
                     ${cart.map(i => `
-                        <li style="border-bottom:1px solid #eee; padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
+                        <li style="border-bottom:1px solid #eee; padding:15px 0; display:flex; justify-content:space-between; align-items:center;">
                             <div>
-                                <strong>${i.name}</strong><br>
-                                <small>Cantidad: ${i.quantity}</small>
+                                <strong style="color:#1A237E; font-size:1.1em;">${i.name}</strong><br>
+                                <small>Cantidad solicitada: <strong>${i.quantity}</strong></small>
                             </div>
-                            <button class="btn-remove" onclick="removeFromCart('${i.id}')">🗑️</button>
+                            <button class="btn-remove" onclick="removeFromCart('${i.id}')" title="Eliminar">🗑️</button>
                         </li>
                     `).join('')}
                 </ul>
-                <button class="btn-secondary" onclick="navigateTo('student_consult')">+ Agregar más material</button>
+                <button class="btn-secondary" onclick="navigateTo('student_consult')" style="margin-top:15px;">+ Agregar más material</button>
             </div>
 
-            <!-- COLUMNA 2: FORMULARIO ADMINISTRATIVO -->
+            <!-- Columna 2: Formulario Administrativo -->
             <div class="form-section">
                 <h3>2. Datos del Préstamo</h3>
                 <form id="loan-form">
-                    <label>Nombre Completo:</label>
-                    <input type="text" id="s-name" placeholder="Nombre del Alumno" required>
+                    <label>Nombre Completo del Alumno:</label>
+                    <input type="text" id="s-name" placeholder="Ej: Juan Pérez" required>
 
-                    <label>Número de Expediente / Matrícula:</label>
-                    <input type="text" id="s-id" value="${currentStudentId}" required readonly style="background:#f0f0f0; cursor:not-allowed;">
+                    <label>Número de Matrícula:</label>
+                    <input type="text" id="s-id" value="${currentStudentId}" required readonly style="background:#f0f0f0; cursor:not-allowed; color:#555;">
 
                     <div class="form-row">
                         <div>
@@ -403,21 +506,21 @@ const renderRequestForm = () => {
                     <label>Aula / Laboratorio:</label>
                     <input type="text" id="s-aula" placeholder="Ej: Lab de Redes, A-12" required>
 
-                    <label>Profesor a Cargo:</label>
-                    <input type="text" id="s-prof" placeholder="Nombre del Docente Responsable" required>
+                    <label>Profesor Responsable:</label>
+                    <input type="text" id="s-prof" placeholder="Nombre del Docente" required>
 
-                    <button type="submit" class="btn-primary" style="margin-top:20px;">Confirmar y Generar Solicitud</button>
+                    <button type="submit" class="btn-primary" style="margin-top:20px; padding:15px; font-size:1.1em;">Generar Token de Entrega</button>
                 </form>
             </div>
         </div>
         
-        <!-- ÁREA DE RESULTADO (OCULTA AL INICIO) -->
+        <!-- ÁREA DE RESULTADO (TOKEN) -->
         <div id="result-area" style="display:none; text-align:center; margin-top:30px; background:white; padding:30px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
-            <!-- Se inyecta dinámicamente tras el submit -->
+            <!-- Se inyecta dinámicamente -->
         </div>
     `;
 
-    // MANEJO DEL ENVÍO DEL FORMULARIO
+    // Manejo del envío del formulario
     document.getElementById('loan-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -429,7 +532,7 @@ const renderRequestForm = () => {
             time: document.getElementById('s-time').value,
             aula: document.getElementById('s-aula').value,
             professor: document.getElementById('s-prof').value,
-            items: cart, // Array con los materiales
+            items: cart,
             timestamp: Date.now()
         };
 
@@ -437,19 +540,23 @@ const renderRequestForm = () => {
         const resultArea = document.getElementById('result-area');
         document.querySelector('.request-container').style.display = 'none';
         resultArea.style.display = 'block';
-        resultArea.innerHTML = `<div style="padding:20px;"><h3>Procesando solicitud...</h3></div>`;
+        resultArea.innerHTML = `
+            <div style="padding:20px;">
+                <h3>Procesando solicitud...</h3>
+                <p>Contactando con el servidor...</p>
+            </div>`;
 
-        // LÓGICA HÍBRIDA (Intentar Nube -> Fallback Token)
+        // ESTRATEGIA HÍBRIDA: NUBE vs LOCAL
         let generatedCode = null;
         let isOnline = false;
 
         if (navigator.onLine && window.db && window.firebase) {
             try {
-                // Generar un código corto legible (Ej: P-4821)
+                // Generar Código Corto (Ej: P-4821)
                 const shortCode = "P-" + Math.floor(1000 + Math.random() * 9000);
                 const { collection, addDoc } = window.firebase;
                 
-                // Guardar en colección temporal 'requests' en la nube
+                // Guardar en colección 'requests'
                 await addDoc(collection(window.db, "requests"), {
                     ...requestData,
                     code: shortCode,
@@ -460,7 +567,7 @@ const renderRequestForm = () => {
                 isOnline = true;
 
             } catch (err) { 
-                console.warn("Fallo subida online, usando Token local.", err); 
+                console.warn("Fallo subida online, cambiando a modo offline.", err); 
                 isOnline = false;
             }
         }
@@ -469,34 +576,51 @@ const renderRequestForm = () => {
         if (isOnline) {
             // Opción A: Éxito Online (Código Corto)
             resultArea.innerHTML = `
-                <h2 style="color:#009688;">✅ Solicitud Enviada</h2>
-                <p>Entrega este código de verificación al encargado del almacén:</p>
+                <h2 style="color:#009688; font-size:2em;">✅ Solicitud Enviada</h2>
+                <p style="font-size:1.2em;">Entrega este código de verificación al encargado:</p>
                 
                 <div class="big-code">${generatedCode}</div>
                 
-                <p style="font-size:0.9em; color:#666;">Tu solicitud con ${cart.length} materiales ha sido guardada en la nube.</p>
-                <button onclick="finishStudentProcess()" class="btn-secondary">Finalizar y Salir</button>
+                <p style="font-size:0.9em; color:#666; margin-top:20px;">
+                    Tu solicitud ha sido guardada en la nube. <br>
+                    El encargado la verá en su pantalla al ingresar el código.
+                </p>
+                <button onclick="finishStudentProcess()" class="btn-secondary" style="margin-top:20px;">Finalizar y Salir</button>
             `;
         } else {
-            // Opción B: Fallback Offline (Token JSON) - Sin QR, solo texto como pediste
+            // Opción B: Fallback Offline (Token JSON)
             const jsonStr = JSON.stringify(requestData);
+            const base64Str = btoa(jsonStr); // Codificar para que sea un string seguro
+            
             resultArea.innerHTML = `
-                <h2 style="color:#E65100;">⚠️ Modo Sin Conexión</h2>
-                <p>No se pudo conectar al servidor. Copia este token para el encargado:</p>
+                <h2 style="color:#E65100; font-size:2em;">⚠️ Modo Sin Conexión</h2>
+                <p>No se pudo conectar al servidor. Se ha generado un Token Local.</p>
                 
-                <textarea style="width:100%; height:100px; font-family:monospace; font-size:0.8em;" readonly>${jsonStr}</textarea>
+                <div style="background:#FFF3E0; padding:15px; border-radius:8px; margin:20px 0; text-align:left;">
+                    <p style="font-weight:bold; margin-top:0;">Instrucciones:</p>
+                    <ol>
+                        <li>Copia el texto de abajo (Botón "Copiar").</li>
+                        <li>El encargado seleccionará "Opción B" en su sistema.</li>
+                        <li>Pégale el texto para que valide tu préstamo.</li>
+                    </ol>
+                </div>
                 
-                <button onclick="copyData('${btoa(jsonStr)}')" class="btn-primary" style="margin-bottom:10px;">Copiar Token</button>
-                <button onclick="finishStudentProcess()" class="btn-secondary">Finalizar</button>
+                <textarea id="offline-token" style="width:100%; height:80px; font-family:monospace; font-size:0.8em;" readonly>${jsonStr}</textarea>
+                
+                <div style="display:flex; gap:10px; justify-content:center; margin-top:10px;">
+                    <button onclick="copyToken()" class="btn-primary" style="background:#E65100;">Copiar Token</button>
+                    <button onclick="finishStudentProcess()" class="btn-secondary">Finalizar</button>
+                </div>
             `;
         }
     });
 };
 
-// Función auxiliar para copiar el token al portapapeles
-window.copyData = (encoded) => {
-    const text = atob(encoded);
-    navigator.clipboard.writeText(text).then(() => alert("Token copiado al portapapeles."));
+window.copyToken = () => {
+    const textArea = document.getElementById('offline-token');
+    textArea.select();
+    document.execCommand('copy'); // Fallback para móviles viejos
+    navigator.clipboard.writeText(textArea.value).then(() => alert("✅ Token copiado al portapapeles."));
 };
 
 window.finishStudentProcess = () => { 
@@ -504,30 +628,32 @@ window.finishStudentProcess = () => {
     navigateTo('student_consult'); 
 };
 
-// --- VISTA DE HISTORIAL (CONSULTA FIREBASE) ---
+/**
+ * Vista de Historial del Alumno.
+ */
 const renderStudentHistory = async () => {
-    mainContent.innerHTML = `<h2>Historial de Préstamos</h2><p>Consultando registros en la nube para: <strong>${currentStudentId}</strong>...</p>`;
+    mainContent.innerHTML = `<h2>Historial de Préstamos</h2><p>Cargando registros...</p>`;
     
     if (!currentStudentId) { 
-        mainContent.innerHTML = `<p>No hay matrícula registrada. Por favor, cierra sesión e ingresa tu matrícula.</p>`; 
+        mainContent.innerHTML = `<div style="text-align:center; padding:30px;"><p>No hay matrícula registrada. Por favor, cierra sesión e ingresa tu matrícula.</p></div>`; 
         return; 
     }
 
     if (navigator.onLine && window.db && window.firebase) {
         try {
             const { collection, query, where, getDocs } = window.firebase;
-            // Buscar préstamos donde el studentId coincida
+            // Buscar préstamos donde studentId == currentStudentId
             const q = query(collection(window.db, "loans"), where("studentId", "==", currentStudentId));
             
             const querySnapshot = await getDocs(q);
             const history = [];
             querySnapshot.forEach((doc) => history.push({ firestoreId: doc.id, ...doc.data() }));
             
-            // Ordenar por fecha (más reciente primero)
+            // Ordenar por fecha descendente
             history.sort((a, b) => b.timestamp - a.timestamp);
 
             if (history.length === 0) {
-                mainContent.innerHTML = `<h2>Historial</h2><p>No se encontraron préstamos registrados en el sistema.</p>`;
+                mainContent.innerHTML = `<h2>Historial</h2><p style="text-align:center; margin-top:20px;">No se encontraron préstamos registrados con la matrícula ${currentStudentId}.</p>`;
                 return;
             }
 
@@ -538,10 +664,12 @@ const renderStudentHistory = async () => {
                         <div class="material-card history-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                                 <strong>📅 ${new Date(loan.timestamp).toLocaleDateString()}</strong>
-                                <span class="tag" style="background:#E8F5E9; color:2E7D32; border-color:#2E7D32;">${loan.status === 'active' ? 'En Curso' : 'Devuelto'}</span>
+                                <span class="tag" style="background:${loan.status === 'active' ? '#FFEB3B' : '#C8E6C9'}; color:#333;">
+                                    ${loan.status === 'active' ? '⏳ En Curso' : '✅ Devuelto'}
+                                </span>
                             </div>
                             <p style="margin:0; font-size:0.9em;"><strong>Aula:</strong> ${loan.aula}</p>
-                            <p style="margin:0 0 10px 0; font-size:0.9em;"><strong>Profesor:</strong> ${loan.professor || 'No especificado'}</p>
+                            <p style="margin:0 0 10px 0; font-size:0.9em;"><strong>Profesor:</strong> ${loan.professor || 'No esp.'}</p>
                             <hr style="border:0; border-top:1px solid #eee;">
                             <ul style="padding-left:20px; margin-bottom:0; color:#555;">
                                 ${loan.items.map(i => `<li>${i.name} (x${i.quantity})</li>`).join('')}
@@ -551,50 +679,53 @@ const renderStudentHistory = async () => {
                 </div>`;
         } catch (error) { 
             console.error(error);
-            mainContent.innerHTML = `<p>Error de conexión. El historial requiere internet para consultar la base de datos.</p>`; 
+            mainContent.innerHTML = `<div style="text-align:center; padding:20px;"><p>❌ Error al conectar con el servidor de historial.</p></div>`; 
         }
     } else { 
-        mainContent.innerHTML = `<p><strong>Modo Offline:</strong> El historial no está disponible sin conexión a internet.</p>`; 
+        mainContent.innerHTML = `<div style="text-align:center; padding:20px;"><p>🚫 <strong>Modo Offline:</strong> El historial histórico no está disponible sin conexión a internet.</p></div>`; 
     }
 };
 
-// --------------------------------------------------------------------------------
-// 7. VISTAS DEL ADMINISTRADOR
-// --------------------------------------------------------------------------------
 
-// --- VALIDACIÓN Y ENTREGA DE MATERIAL ---
+// =========================================================
+// 7. LÓGICA DE VISTAS: ADMINISTRADOR
+// =========================================================
+
+/**
+ * Vista de Validación de Préstamos (Punto de venta/entrega).
+ */
 const renderAdminValidate = () => {
     mainContent.innerHTML = `
         <h2>✅ Validar y Entregar Préstamo</h2>
         
         <div class="admin-form">
-            <!-- OPCIÓN A: CÓDIGO CORTO (Recomendado) -->
-            <div style="background:#E8F5E9; padding:15px; border-radius:8px; margin-bottom:20px;">
-                <h3 style="margin-top:0; color:#2E7D32;">Opción A: Código de Verificación</h3>
-                <p style="font-size:0.9em;">Si el alumno tiene internet, te dará un código corto (Ej: P-1234).</p>
+            <!-- OPCIÓN A: CÓDIGO CORTO -->
+            <div style="background:#E8F5E9; padding:15px; border-radius:8px; margin-bottom:20px; border: 1px solid #C8E6C9;">
+                <h3 style="margin-top:0; color:#2E7D32;">Opción A: Código Online</h3>
+                <p style="font-size:0.9em; margin-bottom:10px;">Ingresa el código corto que le apareció al alumno (Ej: P-1234).</p>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="verify-code" placeholder="P-XXXX" style="font-size:1.5em; text-align:center; text-transform:uppercase; font-weight:bold;">
                     <button onclick="searchByCode()" class="btn-primary" style="width:auto;">Buscar</button>
                 </div>
             </div>
 
-            <hr style="margin:20px 0; border:0; border-top:2px dashed #ccc;">
-
-            <!-- OPCIÓN B: JSON MANUAL (Respaldo Offline) -->
-            <div style="background:#FFF3E0; padding:15px; border-radius:8px;">
-                <h3 style="margin-top:0; color:#E65100;">Opción B: Respaldo Offline (JSON)</h3>
-                <p style="font-size:0.9em;">Si el alumno NO tiene internet, pega el Token JSON aquí:</p>
-                <textarea id="qr-input" rows="3" placeholder='Pegar código JSON aquí...' style="font-family:monospace; font-size:0.8em;"></textarea>
-                <button onclick="processJSON()" class="btn-secondary">Procesar Token</button>
+            <!-- OPCIÓN B: TOKEN OFFLINE -->
+            <div style="background:#FFF3E0; padding:15px; border-radius:8px; border: 1px solid #FFE0B2;">
+                <h3 style="margin-top:0; color:#E65100;">Opción B: Token Offline</h3>
+                <p style="font-size:0.9em; margin-bottom:10px;">Si el alumno no tiene internet, pega aquí el token de texto que generó su celular:</p>
+                <textarea id="qr-input" rows="3" placeholder='Pegar Token JSON aquí...' style="font-family:monospace; font-size:0.8em; width:100%;"></textarea>
+                <button onclick="processJSON()" class="btn-secondary" style="margin-top:10px;">Validar Token</button>
             </div>
         </div>
 
-        <!-- Aquí se muestra el resultado de la búsqueda -->
+        <!-- Contenedor de resultados -->
         <div id="loan-result"></div>
     `;
 };
 
-// Búsqueda por Código Corto en Firebase
+/**
+ * Busca una solicitud por Código Corto en Firestore.
+ */
 window.searchByCode = async () => {
     const code = document.getElementById('verify-code').value.toUpperCase().trim();
     if(!code) return alert("Por favor escribe un código.");
@@ -602,29 +733,30 @@ window.searchByCode = async () => {
     if (navigator.onLine && window.db && window.firebase) {
         try {
             const { collection, query, where, getDocs } = window.firebase;
-            // Buscamos en la colección 'requests'
+            // Buscar en 'requests' donde code == input y status == pending
             const q = query(collection(window.db, "requests"), where("code", "==", code), where("status", "==", "pending"));
             const snap = await getDocs(q);
 
             if (!snap.empty) {
-                // Encontramos la solicitud
                 const docData = snap.docs[0].data();
-                // Guardamos el ID del documento para poder borrarlo/actualizarlo después
                 const requestDocId = snap.docs[0].id;
+                // Mostrar vista de confirmación
                 showConfirmation({ ...docData, requestDocId });
             } else {
-                alert("Código no encontrado o la solicitud ya fue procesada.");
+                alert("❌ Código no encontrado o la solicitud ya fue procesada.");
             }
         } catch (error) { 
             console.error(error);
             alert("Error de conexión al buscar el código."); 
         }
     } else {
-        alert("Necesitas internet para validar por código corto. Usa la opción B.");
+        alert("⚠️ Necesitas internet para validar por código corto. Usa la opción B (Token).");
     }
 };
 
-// Lógica: Procesar JSON pegado manualmente
+/**
+ * Procesa el JSON pegado manualmente (Opción Offline).
+ */
 window.processJSON = () => {
     try { 
         const raw = document.getElementById('qr-input').value;
@@ -632,24 +764,26 @@ window.processJSON = () => {
         const data = JSON.parse(raw);
         showConfirmation(data);
     } 
-    catch (e) { alert("El texto pegado no es un JSON válido."); }
+    catch (e) { alert("❌ El texto pegado no es un token válido."); }
 };
 
-// Vista de Confirmación (Común para ambos métodos)
+/**
+ * Muestra el resumen de la solicitud para confirmar.
+ */
 const showConfirmation = async (data) => {
     const resultDiv = document.getElementById('loan-result');
+    resultDiv.innerHTML = `<p>Verificando existencias...</p>`;
     
-    // HTML Base del resumen
     let html = `
         <div style="background:white; padding:20px; border-radius:8px; margin-top:30px; border:2px solid #1A237E; box-shadow:0 5px 15px rgba(0,0,0,0.2);">
             <h3 style="margin-top:0; color:#1A237E;">Confirmar Entrega de Material</h3>
             
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.9em; margin-bottom:15px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.9em; margin-bottom:15px; background:#f9f9f9; padding:10px; border-radius:5px;">
                 <div><strong>Alumno:</strong> ${data.studentName}</div>
                 <div><strong>Matrícula:</strong> ${data.studentId}</div>
                 <div><strong>Aula:</strong> ${data.aula}</div>
                 <div><strong>Profesor:</strong> ${data.professor}</div>
-                <div><strong>Horario:</strong> ${data.time}</div>
+                <div style="grid-column: 1/-1;"><strong>Horario:</strong> ${data.time}</div>
             </div>
             
             <hr>
@@ -658,11 +792,10 @@ const showConfirmation = async (data) => {
     
     let canApprove = true;
     
-    // Validación de Stock en Tiempo Real
+    // VALIDACIÓN DE STOCK EN TIEMPO REAL
     if (navigator.onLine && window.db && window.firebase) {
         const { doc, getDoc } = window.firebase;
         
-        // Iteramos sobre cada item solicitado para verificar stock
         for (let item of data.items) {
             const ref = doc(window.db, "inventory", item.id);
             const snap = await getDoc(ref);
@@ -670,33 +803,34 @@ const showConfirmation = async (data) => {
             if (snap.exists()) {
                 const currentStock = snap.data().available;
                 if (currentStock >= item.quantity) {
-                    html += `<li style="color:green; padding:5px 0; border-bottom:1px solid #eee;">
-                        ✅ <strong>${item.name}</strong>: Solicita ${item.quantity} (Stock actual: ${currentStock})
+                    html += `<li style="color:green; padding:8px 0; border-bottom:1px solid #eee;">
+                        ✅ <strong>${item.name}</strong> <br> 
+                        Solicita: ${item.quantity} | Stock Actual: ${currentStock}
                     </li>`;
                 } else {
-                    html += `<li style="color:red; padding:5px 0; border-bottom:1px solid #eee;">
-                        ❌ <strong>${item.name}</strong>: Solicita ${item.quantity} (Stock INSUFICIENTE: ${currentStock})
+                    html += `<li style="color:red; padding:8px 0; border-bottom:1px solid #eee; background:#FFEBEE;">
+                        ❌ <strong>${item.name}</strong> <br> 
+                        Solicita: ${item.quantity} | Stock INSUFICIENTE: ${currentStock}
                     </li>`;
                     canApprove = false;
                 }
             } else {
-                 html += `<li style="color:orange; padding:5px 0;">⚠️ <strong>${item.name}</strong>: No encontrado en BD (Posiblemente ID local antiguo)</li>`;
+                 html += `<li style="color:orange; padding:8px 0;">⚠️ <strong>${item.name}</strong>: No encontrado en BD (Posible ID local)</li>`;
                  canApprove = false; 
             }
         }
     } else {
-        html += "<p style='color:red; font-weight:bold;'>⚠️ Sin conexión a internet. No se puede validar el stock real.</p>";
+        html += "<p style='color:red; font-weight:bold; background:#FFEBEE; padding:10px;'>⚠️ Sin conexión a internet. No se puede validar el stock real.</p>";
         canApprove = false;
     }
     
     html += `</ul>`;
     
     if (canApprove) {
-        // Guardamos los datos en variable global temporal para pasarlos a la función de confirmación
         window.tempLoanData = data; 
         html += `<button onclick="confirmLoan()" class="btn-primary" style="background:#2E7D32; margin-top:15px; padding:15px; font-size:1.2em;">✅ CONFIRMAR Y ENTREGAR</button>`;
     } else {
-        html += `<button disabled style="background:#ccc; color:#666; width:100%; padding:10px; cursor:not-allowed;">⛔ No se puede aprobar (Stock insuficiente o Error)</button>`;
+        html += `<button disabled style="background:#ccc; color:#666; width:100%; padding:10px; cursor:not-allowed; margin-top:15px;">⛔ No se puede aprobar (Stock insuficiente o Error)</button>`;
     }
     
     html += `</div>`;
@@ -704,7 +838,9 @@ const showConfirmation = async (data) => {
     resultDiv.scrollIntoView({ behavior: 'smooth' });
 };
 
-// Función Final: Ejecutar la transacción en BD
+/**
+ * Ejecuta la transacción de préstamo en la BD.
+ */
 window.confirmLoan = async () => {
     const data = window.tempLoanData;
     if (!data) return;
@@ -721,14 +857,14 @@ window.confirmLoan = async () => {
                 }
             }
 
-            // 2. Guardar Registro Histórico en 'loans'
+            // 2. Guardar Registro en 'loans'
             await addDoc(collection(window.db, "loans"), {
-                ...data, // Guardamos todos los detalles
+                ...data, 
                 timestamp: Date.now(),
                 status: 'active'
             });
 
-            // 3. Borrar solicitud temporal si existe (flujo online)
+            // 3. Borrar solicitud temporal si existe
             if (data.requestDocId) {
                 await deleteDoc(doc(window.db, "requests", data.requestDocId));
             }
@@ -745,61 +881,126 @@ window.confirmLoan = async () => {
     }
 };
 
-// --- ADMIN DASHBOARD (CON GRÁFICA DE BARRAS CSS) ---
+// --- GESTIÓN DE PRÉSTAMOS ACTIVOS Y DEVOLUCIÓN ---
+const renderAdminActiveLoans = async () => {
+    mainContent.innerHTML = `<h2>Préstamos Activos</h2><p>Cargando...</p>`;
+    
+    if (navigator.onLine && window.db && window.firebase) {
+        try {
+            const { collection, query, where, getDocs } = window.firebase;
+            // Buscar solo los que tienen status 'active'
+            const q = query(collection(window.db, "loans"), where("status", "==", "active"));
+            const snap = await getDocs(q);
+            
+            if (snap.empty) {
+                mainContent.innerHTML = `<h2>Préstamos Activos</h2><p>No hay material prestado actualmente.</p>`;
+                return;
+            }
+
+            const loans = [];
+            snap.forEach(doc => loans.push({ id: doc.id, ...doc.data() }));
+
+            mainContent.innerHTML = `
+                <h2>Préstamos Activos (${loans.length})</h2>
+                <div class="history-list">
+                    ${loans.map(loan => `
+                        <div class="material-card" style="border-left: 5px solid #FF9800; position:relative;">
+                            <div style="display:flex; justify-content:space-between;">
+                                <strong>${loan.studentName}</strong>
+                                <small>${new Date(loan.timestamp).toLocaleDateString()}</small>
+                            </div>
+                            <p style="margin:5px 0; font-size:0.9em;"><strong>${loan.studentId}</strong> | Aula: ${loan.aula}</p>
+                            <p style="margin:0; font-size:0.8em; color:#666;">Prof: ${loan.professor}</p>
+                            <hr style="margin:5px 0; border:0; border-top:1px dashed #ccc;">
+                            <ul style="padding-left:20px; margin:5px 0; font-size:0.9em; color:#333;">
+                                ${loan.items.map(i => `<li>${i.name} (x${i.quantity})</li>`).join('')}
+                            </ul>
+                            <button onclick="returnLoan('${loan.id}')" class="btn-primary" style="background:#D32F2F; margin-top:10px; font-size:0.9em;">🛑 TERMINAR Y DEVOLVER STOCK</button>
+                        </div>
+                    `).join('')}
+                </div>`;
+        } catch (e) { 
+            console.error(e);
+            mainContent.innerHTML = `<p>Error de conexión.</p>`; 
+        }
+    } else {
+        mainContent.innerHTML = `<p>Necesitas internet para gestionar devoluciones.</p>`;
+    }
+};
+
+// Función para devolver material
+window.returnLoan = async (loanId) => {
+    if (!confirm("¿Confirmar que el alumno devolvió todo el material?")) return;
+
+    if (window.db && window.firebase) {
+        const { doc, getDoc, updateDoc } = window.firebase;
+        try {
+            // 1. Obtener datos del préstamo
+            const loanRef = doc(window.db, "loans", loanId);
+            const loanSnap = await getDoc(loanRef);
+            
+            if (!loanSnap.exists()) return alert("Error: Préstamo no encontrado.");
+            const loanData = loanSnap.data();
+
+            // 2. Devolver stock al inventario
+            for (let item of loanData.items) {
+                const productRef = doc(window.db, "inventory", item.id);
+                const productSnap = await getDoc(productRef);
+                
+                if (productSnap.exists()) {
+                    const currentStock = productSnap.data().available;
+                    await updateDoc(productRef, { available: currentStock + item.quantity });
+                }
+            }
+
+            // 3. Actualizar estado a 'returned'
+            await updateDoc(loanRef, { status: 'returned', returnDate: Date.now() });
+
+            alert("✅ Material devuelto y stock actualizado.");
+            renderAdminActiveLoans(); // Recargar
+
+        } catch (e) {
+            console.error(e);
+            alert("Error al procesar la devolución.");
+        }
+    }
+};
+
+// --- ADMIN DASHBOARD ---
 const renderAdminDashboard = async () => {
-    // Simulamos datos de préstamos por día para la gráfica
+    // Gráfica Simulada (Datos Ficticios para Demo)
     const weeklyData = [
-        { day: "Lun", count: 12 },
-        { day: "Mar", count: 19 },
-        { day: "Mié", count: 8 },
-        { day: "Jue", count: 15 },
-        { day: "Vie", count: 22 } 
+        { d: 'L', v: 12 }, { d: 'M', v: 19 }, { d: 'X', v: 8 }, { d: 'J', v: 15 }, { d: 'V', v: 22 }
     ];
-
-    // Calcular el máximo para sacar porcentajes de altura
-    const maxVal = Math.max(...weeklyData.map(d => d.count));
-
-    // Generar HTML de las barras
-    const barsHtml = weeklyData.map(d => {
-        const height = (d.count / maxVal) * 100; 
-        const colorClass = d.count === maxVal ? 'bar-peak' : ''; 
-        
-        return `
-            <div class="chart-bar-container">
-                <div class="chart-bar ${colorClass}" style="height: ${height}%;">
-                    <span class="chart-tooltip">${d.count}</span>
-                </div>
-                <span class="chart-label">${d.day}</span>
+    const max = 22;
+    
+    const barsHtml = weeklyData.map((item, i) => `
+        <div class="chart-bar-container">
+            <div class="chart-bar ${i==4?'bar-peak':''}" style="height:${(item.v/max)*100}%;">
+                <span class="chart-tooltip">${item.v}</span>
             </div>
-        `;
-    }).join('');
+            <span class="chart-label">${item.d}</span>
+        </div>`).join('');
 
-    // Obtener datos reales simples para los KPIs
-    const inventory = await getInventory();
-    const lowStock = inventory.filter(i => i.available < 2).length;
+    // Datos reales simples
+    const inv = await getInventory();
+    const lowStock = inv.filter(i => i.available < 2).length;
 
     mainContent.innerHTML = `
         <h2>Dashboard de Almacén</h2>
-        
-        <!-- TARJETAS DE KPI -->
         <div class="dashboard-grid">
             <div class="kpi-card">
                 <h3>${lowStock}</h3>
-                <p>⚠️ Stock Crítico</p>
-            </div>
-            <div class="kpi-card">
-                <h3>76</h3>
-                <p>✅ Préstamos Totales</p>
+                <p>⚠️ Stock Bajo</p>
             </div>
             <div class="kpi-card highlight">
                 <h3>Viernes</h3>
-                <p>📅 Día más activo</p>
+                <p>📅 Día Pico</p>
             </div>
         </div>
-
-        <!-- GRÁFICA DE BARRAS -->
+        
         <div class="chart-section">
-            <h3>Actividad Semanal (Préstamos)</h3>
+            <h3>Actividad Semanal</h3>
             <div class="chart-container">
                 ${barsHtml}
             </div>
@@ -819,18 +1020,19 @@ const renderAdminInventory = async () => {
         <h2>Gestión de Inventario</h2>
         
         <form id="add-form" class="admin-form">
-            <h3>Alta de Material</h3>
+            <h3>Alta de Nuevo Material</h3>
             <label>Nombre:</label><input type="text" id="m-name" required>
             <label>Descripción:</label><input type="text" id="m-desc" required>
             
             <div class="form-row">
-                <div><label>Stock:</label><input type="number" id="m-total" min="1" required></div>
+                <div><label>Stock Total:</label><input type="number" id="m-total" min="1" required></div>
             </div>
             
-            <label>Etiquetas (Separadas por comas):</label>
+            <label>Etiquetas (Tags):</label>
             <input type="text" id="m-tags" placeholder="Ej: Lab Electrónica, Mecatrónica, Cables">
+            <small style="color:#666;">Separa las etiquetas con comas.</small>
             
-            <button type="submit" class="btn-primary">Guardar Material</button>
+            <button type="submit" class="btn-primary" style="margin-top:15px;">Guardar Material</button>
         </form>
         
         <h3>Inventario Actual</h3>
@@ -863,19 +1065,20 @@ const renderAdminInventory = async () => {
         if(navigator.onLine && window.db && window.firebase) {
              try {
                  await window.firebase.addDoc(window.firebase.collection(window.db, "inventory"), newItem);
-                 alert("Material guardado en la Nube.");
-                 await renderAdminInventory(); 
+                 alert("✅ Material guardado en la Nube.");
+                 await renderAdminInventory(); // Recargar vista
              } catch(err) {
-                 alert("Error al guardar en Firebase.");
+                 console.error(err);
+                 alert("❌ Error al guardar en Firebase.");
              }
         } else {
-            alert("No se puede añadir material en modo Offline.");
+            alert("⚠️ No se puede añadir material en modo Offline. Conéctate para gestionar el inventario.");
         }
     });
 };
 
 // --------------------------------------------------------------------------------
-// 8. SERVICE WORKER REGISTRO
+// 8. REGISTRO DEL SERVICE WORKER
 // --------------------------------------------------------------------------------
 if('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
