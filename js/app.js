@@ -15,6 +15,8 @@ const CART_KEY = 'unistock_loan_cart';
 // --------------------------------------------------------------------------------
 function updateConnectionStatus() {
     const toast = document.getElementById('connection-toast');
+    if(!toast) return; // Protección si el elemento no existe aún
+
     if (navigator.onLine) {
         toast.textContent = "🟢 Conexión Restablecida";
         toast.classList.add('online');
@@ -182,19 +184,39 @@ const updateNav = () => {
 };
 
 window.login = (role) => {
+    // Lógica para tomar valores de los inputs en lugar de prompt (Versión Móvil Amigable)
     if(role === 'admin') {
-        const pass = prompt("Ingrese Contraseña de Administrador:");
-        if(pass !== "utsjr2025") return alert("Contraseña Incorrecta. Acceso Denegado.");
+        const passInput = document.getElementById('login-admin-pass');
+        // Si no existen los inputs (por ejemplo, login desde consola), usamos prompt como fallback
+        if (!passInput) {
+             const pass = prompt("Ingrese Contraseña de Administrador:");
+             if(pass !== "utsjr2025") return alert("Contraseña Incorrecta.");
+        } else {
+             const password = passInput.value;
+             if(password !== "utsjr2025") {
+                alert("Contraseña Incorrecta");
+                return;
+             }
+        }
     }
     
     if(role === 'student') {
-        const id = prompt("Por favor, ingresa tu Matrícula:", currentStudentId);
-        if(id) {
-            currentStudentId = id;
-            localStorage.setItem('student_id', id);
+        const idInput = document.getElementById('login-student-id');
+        let matricula = '';
+        
+        if (!idInput) {
+             matricula = prompt("Por favor, ingresa tu Matrícula:", currentStudentId);
+             if (!matricula) return;
         } else {
-            return; // Canceló el prompt
+             matricula = idInput.value.trim();
+             if(!matricula) {
+                alert("Por favor ingresa tu matrícula");
+                return;
+             }
         }
+        
+        currentStudentId = matricula;
+        localStorage.setItem('student_id', matricula);
     }
 
     currentUserRole = role;
@@ -456,11 +478,11 @@ const renderRequestForm = () => {
                 <button onclick="finishStudentProcess()" class="btn-secondary">Finalizar y Salir</button>
             `;
         } else {
-            // Opción B: Fallback Offline (Token JSON)
+            // Opción B: Fallback Offline (Token JSON) - Sin QR, solo texto como pediste
             const jsonStr = JSON.stringify(requestData);
             resultArea.innerHTML = `
                 <h2 style="color:#E65100;">⚠️ Modo Sin Conexión</h2>
-                <p>No se pudo conectar al servidor. Copia este texto o muéstralo al encargado:</p>
+                <p>No se pudo conectar al servidor. Copia este token para el encargado:</p>
                 
                 <textarea style="width:100%; height:100px; font-family:monospace; font-size:0.8em;" readonly>${jsonStr}</textarea>
                 
@@ -706,7 +728,7 @@ window.confirmLoan = async () => {
                 status: 'active'
             });
 
-            // 3. Borrar solicitud temporal si existe
+            // 3. Borrar solicitud temporal si existe (flujo online)
             if (data.requestDocId) {
                 await deleteDoc(doc(window.db, "requests", data.requestDocId));
             }

@@ -46,27 +46,42 @@
                 if (typeof window.initApp === 'function') window.initApp();
 
             } catch (error) {
-                console.log("⚠️ Modo Offline activo");
+                console.log("⚠️ Modo Offline activo (Sin conexión a Firebase)");
                 if (typeof window.initApp === 'function') window.initApp();
             }
         };
     </script>
 </head>
 <body>
+    <!-- INDICADOR DE CONEXIÓN -->
+    <div id="connection-toast" class="toast hidden">🔴 Sin Conexión - Modo Offline</div>
+
     <header>
-        <h1><img src="./images/utsjr_logo.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
+        <h1><img src="./images/utsjr.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
         <nav id="app-nav"></nav>
     </header>
     
-    <!-- CAMBIO: El indicador ahora está AQUÍ, debajo del header -->
-    <div id="connection-toast" class="toast hidden">🔴 Sin Conexión - Modo Offline</div>
-    
     <main id="content">
+        <!-- VISTA DE LOGIN MEJORADA (Inputs en pantalla) -->
         <div id="login-container">
-            <h2>Acceso al Sistema</h2>
-            <p>Selecciona tu perfil:</p>
-            <button onclick="login('admin')">Acceso Almacén (Admin)</button>
-            <button onclick="login('student')">Acceso Alumno</button>
+            <h2>Bienvenido a UniStock</h2>
+            <p class="login-subtitle">Sistema de Inventario UTSJR</p>
+            
+            <!-- SECCIÓN ALUMNO -->
+            <div class="login-card student-login">
+                <h3>👨‍🎓 Acceso Alumno</h3>
+                <input type="number" id="login-student-id" placeholder="Ingresa tu Matrícula" class="login-input">
+                <button onclick="login('student')" class="btn-login student">Entrar como Alumno</button>
+            </div>
+
+            <hr class="login-divider">
+
+            <!-- SECCIÓN ADMIN -->
+            <div class="login-card admin-login">
+                <h3>🛡️ Acceso Almacén</h3>
+                <input type="password" id="login-admin-pass" placeholder="Contraseña Admin" class="login-input">
+                <button onclick="login('admin')" class="btn-login admin">Entrar como Admin</button>
+            </div>
         </div>
     </main>
 
