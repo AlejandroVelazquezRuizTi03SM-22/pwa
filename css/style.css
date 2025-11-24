@@ -17,7 +17,7 @@ nav a:hover { background-color: #3f51b5; }
 main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 h2 { color: #1A237E; border-bottom: 2px solid #009688; padding-bottom: 10px; margin-top: 20px; }
 
-/* --- INDICADOR DE CONEXIÓN --- */
+/* --- INDICADOR CONEXIÓN --- */
 .toast {
     position: fixed; top: 60px; left: 0; width: 100%; background-color: #D32F2F; color: white; 
     text-align: center; padding: 10px; z-index: 999; font-weight: bold; transition: transform 0.3s ease-in-out;
@@ -97,9 +97,27 @@ input, textarea, select { width: 100%; padding: 10px; margin: 5px 0 15px; border
 
 /* --- RESPONSIVE (MÓVIL) --- */
 @media (max-width: 600px) {
-    header { flex-direction: column; padding: 10px; }
-    header h1 { margin-bottom: 10px; font-size: 1.2em; }
-    nav { width: 100%; justify-content: center; flex-wrap: wrap; gap: 5px; }
-    nav a { background-color: rgba(255,255,255,0.1); padding: 8px 10px; font-size: 0.85em; flex-grow: 1; text-align: center; }
+    header {
+        flex-direction: column; /* Apila logo y menú */
+        padding: 10px;
+    }
+    header h1 {
+        margin-bottom: 10px;
+        font-size: 1.2em;
+    }
+    nav {
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    nav a {
+        background-color: rgba(255,255,255,0.1); /* Fondo suave para botones */
+        padding: 8px 10px;
+        font-size: 0.85em;
+        flex-grow: 1;
+        text-align: center;
+    }
+    /* Ajustamos el indicador de conexión para que no tape el menú ahora más alto */
     .toast { top: 100px; }
 }

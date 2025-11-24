@@ -5,15 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniStock PWA | Inventario UTSJR</title>
     
-    <!-- MANIFIESTO Y TEMA VISUAL -->
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" type="image/png" href="./images/icon.png">
     <meta name="theme-color" content="#1A237E"> 
-    
-    <!-- ESTILOS -->
     <link rel="stylesheet" href="./css/style.css">
     
-    <!-- LIBRERÍA QR (Para modo offline) -->
+    <!-- LIBRERÍA QR (Requerida para modo offline) -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 
     <!-- FIREBASE SDK -->
@@ -22,7 +19,6 @@
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // TUS CREDENCIALES REALES
         const firebaseConfig = {
           apiKey: "AIzaSyBDfQ1h_JzLtPvKxOk-m1XCVcER8L_so7U",
           authDomain: "unistock-pwa.firebaseapp.com",
@@ -40,7 +36,6 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Exponer funciones a la app global
                 window.db = db;
                 window.auth = auth;
                 window.firebase = { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc }; 
@@ -58,7 +53,6 @@
     </script>
 </head>
 <body>
-    <!-- INDICADOR DE CONEXIÓN -->
     <div id="connection-toast" class="toast hidden">🔴 Sin Conexión - Modo Offline</div>
 
     <header>
@@ -67,7 +61,6 @@
     </header>
     
     <main id="content">
-        <!-- VISTA DE LOGIN (CON INPUTS) -->
         <div id="login-container">
             <h2>Bienvenido a UniStock</h2>
             <p class="login-subtitle">Sistema de Inventario UTSJR</p>

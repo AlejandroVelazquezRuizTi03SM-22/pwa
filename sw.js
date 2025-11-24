@@ -1,6 +1,5 @@
-const CACHE_NAME = 'unistock-offline-v6'; // Versión actualizada
+const CACHE_NAME = 'unistock-v7-fix'; // Cambiamos versión
 
-// Archivos críticos para el App Shell
 const urlsToCache = [
   './',
   './index.html',
@@ -13,37 +12,33 @@ const urlsToCache = [
 
 // INSTALACIÓN
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Forzar activación inmediata
+  self.skipWaiting(); 
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('[SW] Cacheando archivos críticos...');
-        return cache.addAll(urlsToCache);
-      })
-      .catch(err => console.error('[SW] Error en instalación:', err))
+      .then(cache => cache.addAll(urlsToCache))
+      .catch(err => console.error('Fallo caché', err))
   );
 });
 
-// ACTIVACIÓN (Limpieza)
+// ACTIVACIÓN
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Borrando caché antigua:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
     })
   );
-  return self.clients.claim(); // Tomar control inmediatamente
+  return self.clients.claim(); 
 });
 
-// INTERCEPCIÓN (Offline First)
+// INTERCEPCIÓN (FALLBACK DE NAVEGACIÓN)
 self.addEventListener('fetch', event => {
-  // Ignorar peticiones no-GET (como subidas a Firebase)
+  // Ignorar peticiones que no sean GET (como las de Firebase)
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
@@ -54,11 +49,11 @@ self.addEventListener('fetch', event => {
           return response;
         }
         
-        // 2. Si no, ir a la red
+        // 2. Intentar red
         return fetch(event.request).catch(() => {
-            // 3. Si falla la red y es una navegación (HTML), devolver index.html
-            // Esto soluciona el "error de conexión" al recargar
-            if (event.request.mode === 'navigate') {
+            // 3. SI FALLA LA RED Y ES UNA PÁGINA (HTML)
+            // Devolver siempre index.html (Esto arregla el error al recargar)
+            if (event.request.headers.get('accept').includes('text/html')) {
                 return caches.match('./index.html');
             }
         });
