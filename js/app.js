@@ -7,7 +7,7 @@ let currentStudentId = localStorage.getItem('student_id') || '';
 
 const INVENTORY_KEY = 'unistock_inventory';
 const CART_KEY = 'unistock_loan_cart';
-const ACTIVE_REQUEST_KEY = 'unistock_active_request'; // Clave para persistencia del token
+const ACTIVE_REQUEST_KEY = 'unistock_active_request';
 
 // --------------------------------------------------------------------------------
 // 2. GESTIÓN DE CONECTIVIDAD
@@ -36,7 +36,6 @@ window.addEventListener('offline', updateConnectionStatus);
 // 3. INVENTARIO (HÍBRIDO)
 // --------------------------------------------------------------------------------
 const getInventory = async () => {
-    // Intento Online
     if (navigator.onLine && window.db && window.firebase) {
         try {
             const { collection, getDocs } = window.firebase;
@@ -47,7 +46,6 @@ const getInventory = async () => {
             return remoteData;
         } catch (error) { console.warn("Offline Mode activado"); }
     }
-    // Fallback Offline
     const local = localStorage.getItem(INVENTORY_KEY);
     const backup = [{ id: "demo", name: "Equipo Demo", description: "Ejemplo Offline", available: 10, total: 10, tags:["Lab"] }];
     return local ? JSON.parse(local) : backup;
@@ -56,7 +54,7 @@ const getInventory = async () => {
 const saveInventory = (data) => localStorage.setItem(INVENTORY_KEY, JSON.stringify(data));
 
 // --------------------------------------------------------------------------------
-// 4. CARRITO DE COMPRAS
+// 4. CARRITO
 // --------------------------------------------------------------------------------
 const getCart = () => JSON.parse(localStorage.getItem(CART_KEY)) || [];
 const saveCart = (c) => { localStorage.setItem(CART_KEY, JSON.stringify(c)); updateCartUI(); };
@@ -88,16 +86,82 @@ const removeFromCart = (id) => {
 const clearCart = () => { localStorage.removeItem(CART_KEY); updateCartUI(); };
 
 // --------------------------------------------------------------------------------
-// 5. SESIÓN Y NAVEGACIÓN
+// 5. SESIÓN, NOTIFICACIONES Y NAVEGACIÓN
 // --------------------------------------------------------------------------------
 window.initApp = function() {
     updateConnectionStatus();
+    
+    // Solicitar permiso para notificaciones al iniciar
+    if ('Notification' in window && Notification.permission !== 'granted') {
+        Notification.requestPermission();
+    }
+
     if(localStorage.getItem('user_role')) {
         currentUserRole = localStorage.getItem('user_role');
         currentStudentId = localStorage.getItem('student_id') || '';
         updateNav();
+        
+        // Si es alumno, iniciamos el monitor de solicitudes para notificaciones
+        if(currentUserRole === 'student' && currentStudentId) {
+            monitorRequests();
+        }
     }
 };
+
+// Monitor de Solicitudes (Simulación de Push Notification)
+// Revisa periódicamente si hay cambios en las solicitudes del alumno
+let monitorInterval;
+const monitorRequests = () => {
+    if (monitorInterval) clearInterval(monitorInterval);
+    
+    monitorInterval = setInterval(async () => {
+        if (!navigator.onLine || !window.db) return;
+
+        // Aquí buscaríamos en Firestore cambios en el estado de las solicitudes
+        // Para esta demo, verificamos el estado del token activo si existe
+        const savedToken = localStorage.getItem(ACTIVE_REQUEST_KEY);
+        if(savedToken) {
+            const token = JSON.parse(savedToken);
+            if(token.type === 'online' && token.code) {
+                 try {
+                    const { collection, query, where, getDocs } = window.firebase;
+                    const q = query(collection(window.db, "requests"), where("code", "==", token.code));
+                    const snap = await getDocs(q);
+                    
+                    // Si la solicitud ya no está en 'requests' (fue movida a 'loans' o borrada)
+                    // o si cambió de estado (aunque aquí las movemos, pero por si acaso)
+                    if(snap.empty) {
+                        // Verificamos si está en 'loans' (Aceptada)
+                         const qLoan = query(collection(window.db, "loans"), where("code", "==", token.code));
+                         const snapLoan = await getDocs(qLoan);
+                         
+                         if(!snapLoan.empty) {
+                             sendPushNotification("✅ ¡Solicitud Aceptada!", "Tu material ha sido entregado. Revisa tu historial.");
+                             localStorage.removeItem(ACTIVE_REQUEST_KEY); // Limpiar token local
+                             navigateTo('student_history');
+                             clearInterval(monitorInterval);
+                         }
+                         // Si no está en loans ni requests, pudo ser rechazada (eliminada)
+                         // En un sistema real, tendríamos una colección 'rejected_requests' o un campo de estado
+                    }
+                 } catch(e) { console.log("Error monitor:", e); }
+            }
+        }
+    }, 10000); // Revisar cada 10 seg
+};
+
+const sendPushNotification = (title, body) => {
+    if (Notification.permission === 'granted') {
+        new Notification(title, {
+            body: body,
+            icon: './images/icon.png',
+            vibrate: [200, 100, 200]
+        });
+    } else {
+        alert(`${title}\n${body}`);
+    }
+};
+
 
 const updateNav = () => {
     const nav = document.getElementById('app-nav');
@@ -122,14 +186,12 @@ const updateNav = () => {
 };
 
 window.login = (role) => {
-    // LOGIN ADMIN (INPUTS)
     if(role === 'admin') {
         const passInput = document.getElementById('login-admin-pass');
         let password = passInput ? passInput.value : prompt("Contraseña:");
         if(password !== "utsjr2025") return alert("Contraseña Incorrecta");
     }
     
-    // LOGIN ALUMNO (INPUTS)
     if(role === 'student') {
         const idInput = document.getElementById('login-student-id');
         let matricula = idInput ? idInput.value.trim() : prompt("Matrícula:");
@@ -142,6 +204,8 @@ window.login = (role) => {
     currentUserRole = role;
     localStorage.setItem('user_role', role);
     updateNav();
+    
+    if(role === 'student') monitorRequests();
 };
 
 window.logout = () => {
@@ -176,8 +240,6 @@ window.navigateTo = async (view) => {
 // --------------------------------------------------------------------------------
 const renderStudentConsultation = async () => {
     const items = await getInventory();
-    
-    // Botón Token Persistente
     const savedToken = localStorage.getItem(ACTIVE_REQUEST_KEY);
     let tokenBtn = '';
     if (savedToken) {
@@ -237,7 +299,7 @@ const renderRequestForm = () => {
             </div>
             <div class="form-section">
                 <form id="loan-form">
-                    <label>Nombre:</label><input type="text" id="s-name" required placeholder="Nombre Completo">
+                    <label>Nombre:</label><input type="text" id="s-name" required>
                     <label>Matrícula:</label><input type="text" id="s-id" value="${currentStudentId}" readonly style="background:#eee">
                     <div class="form-row"><input type="date" id="s-date" value="${today}" required><input type="text" id="s-time" placeholder="Horario" required></div>
                     <input type="text" id="s-aula" placeholder="Aula" required>
@@ -336,11 +398,15 @@ const renderStudentHistory = async () => {
             const q = query(collection(window.db, "loans"), where("studentId", "==", currentStudentId));
             const snap = await getDocs(q);
             const history = [];
-            snap.forEach(d => history.push(d.data()));
+            snap.forEach(d => history.push({id:d.id, ...d.data()}));
             history.sort((a,b) => b.timestamp - a.timestamp);
             mainContent.innerHTML = `<h2>Historial</h2>` + (history.length ? history.map(h => `
                 <div class="material-card history-card">
-                    <p><strong>${new Date(h.timestamp).toLocaleDateString()}</strong> - ${h.status==='active'?'En Curso':'Devuelto'}</p>
+                    <div style="display:flex; justify-content:space-between;">
+                        <strong>${new Date(h.timestamp).toLocaleDateString()}</strong>
+                        <span class="tag" style="background:${h.status==='active'?'#FFEB3B':(h.status==='rejected'?'#FFCDD2':'#C8E6C9')}">${h.status==='active'?'⏳ En Curso':(h.status==='rejected'?'❌ Rechazado':'✅ Devuelto')}</span>
+                    </div>
+                    <p style="font-size:0.9em">Aula: ${h.aula}</p>
                     <ul>${h.items.map(i=>`<li>${i.name} (x${i.quantity})</li>`).join('')}</ul>
                 </div>`).join('') : "<p>Sin registros</p>");
         } catch(e) { mainContent.innerHTML = `<p>Error conexión.</p>`; }
@@ -351,7 +417,6 @@ const renderStudentHistory = async () => {
 // 7. VISTAS ADMIN
 // --------------------------------------------------------------------------------
 const renderAdminValidate = () => {
-    // SOLO MUESTRA OPCIÓN DE CÓDIGO (Sin JSON Pegado)
     mainContent.innerHTML = `
         <h2>Validar Préstamo</h2>
         <div class="admin-form" style="text-align:center;">
@@ -361,7 +426,6 @@ const renderAdminValidate = () => {
                 <input type="text" id="verify-code" placeholder="P-XXXX" style="font-size:1.5em; text-align:center; text-transform:uppercase; width:200px;">
                 <button onclick="searchByCode()" class="btn-primary" style="width:auto;">Buscar</button>
             </div>
-            <p style="margin-top:20px; color:#888; font-size:0.8em;">Validación Offline requiere escáner externo.</p>
         </div>
         <div id="loan-result"></div>
     `;
@@ -370,14 +434,13 @@ const renderAdminValidate = () => {
 window.searchByCode = async () => {
     const code = document.getElementById('verify-code').value.toUpperCase().trim();
     if(!code) return alert("Escribe código");
-    
     if (navigator.onLine && window.db && window.firebase) {
         try {
             const { collection, query, where, getDocs } = window.firebase;
             const q = query(collection(window.db, "requests"), where("code", "==", code), where("status", "==", "pending"));
             const snap = await getDocs(q);
             if (!snap.empty) showConfirmation({...snap.docs[0].data(), docId: snap.docs[0].id});
-            else alert("Código no encontrado");
+            else alert("Código no encontrado o ya procesado");
         } catch (e) { alert("Error conexión"); }
     } else alert("Necesitas internet");
 };
@@ -390,7 +453,11 @@ const showConfirmation = (data) => {
             <p><strong>${data.studentName}</strong> (${data.studentId})</p>
             <p>Aula: ${data.aula}</p>
             <ul>${data.items.map(i=>`<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
-            <button onclick="confirmLoan()" class="btn-primary" style="background:green; margin-top:15px;">ENTREGAR MATERIAL</button>
+            
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button onclick="confirmLoan()" class="btn-primary" style="background:green; flex:1;">✅ ENTREGAR</button>
+                <button onclick="rejectLoan()" class="btn-secondary" style="background:#D32F2F; color:white; border:none; flex:1;">❌ RECHAZAR</button>
+            </div>
         </div>`;
 };
 
@@ -404,12 +471,32 @@ window.confirmLoan = async () => {
                 const snap = await getDoc(ref);
                 if(snap.exists()) await updateDoc(ref, { available: snap.data().available - item.quantity });
             }
-            await addDoc(collection(window.db, "loans"), { ...data, timestamp: Date.now(), status: 'active' });
+            // Guardar con código para que la notificación lo encuentre
+            await addDoc(collection(window.db, "loans"), { ...data, timestamp: Date.now(), status: 'active', code: data.code });
             if(data.docId) await deleteDoc(doc(window.db, "requests", data.docId));
-            alert("Éxito"); 
-            localStorage.removeItem(ACTIVE_REQUEST_KEY); // Limpiar si es el mismo dispositivo
-            navigateTo('admin_active_loans');
+            alert("Éxito: Préstamo registrado."); navigateTo('admin_active_loans');
         } catch (e) { alert("Error BD"); }
+    }
+};
+
+// NUEVA FUNCIÓN: Rechazar Préstamo
+window.rejectLoan = async () => {
+    const data = window.tempLoanData;
+    if (!confirm("¿Rechazar solicitud? Esto notificará al alumno.")) return;
+
+    if (window.db && window.firebase) {
+        const { doc, deleteDoc, addDoc, collection } = window.firebase;
+        try {
+            // Registrar en historial como rechazado (opcional, para notificación)
+            // O simplemente borrar la solicitud. Vamos a guardarlo en loans con status 'rejected'
+             await addDoc(collection(window.db, "loans"), { ...data, timestamp: Date.now(), status: 'rejected', code: data.code });
+            
+            // Borrar de pendientes
+            if(data.docId) await deleteDoc(doc(window.db, "requests", data.docId));
+            
+            alert("Solicitud rechazada.");
+            document.getElementById('loan-result').innerHTML = '';
+        } catch (e) { console.error(e); alert("Error al rechazar."); }
     }
 };
 
@@ -528,4 +615,5 @@ window.addStockToProduct = async (id, name) => {
     } else alert("Error");
 };
 
+// 8. SERVICE WORKER
 if('serviceWorker' in navigator) window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js'));
