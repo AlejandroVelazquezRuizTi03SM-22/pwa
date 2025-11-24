@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unistock-v7-fix'; // Cambiamos versión
+const CACHE_NAME = 'unistock-v8-offline-fix'; // Incrementamos versión para forzar actualización
 
 const urlsToCache = [
   './',
@@ -12,11 +12,14 @@ const urlsToCache = [
 
 // INSTALACIÓN
 self.addEventListener('install', event => {
-  self.skipWaiting(); 
+  self.skipWaiting(); // Fuerza al SW a activarse de inmediato
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(urlsToCache))
-      .catch(err => console.error('Fallo caché', err))
+      .then(cache => {
+        console.log('[SW] Cacheando archivos críticos...');
+        return cache.addAll(urlsToCache);
+      })
+      .catch(err => console.error('[SW] Error en instalación:', err))
   );
 });
 
@@ -27,33 +30,37 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
+            console.log('[SW] Borrando caché antigua:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
     })
   );
-  return self.clients.claim(); 
+  return self.clients.claim(); // Toma control de la página inmediatamente
 });
 
-// INTERCEPCIÓN (FALLBACK DE NAVEGACIÓN)
+// INTERCEPCIÓN DE RED (LA CORRECCIÓN ESTÁ AQUÍ)
 self.addEventListener('fetch', event => {
-  // Ignorar peticiones que no sean GET (como las de Firebase)
+  // Ignoramos peticiones que no sean GET (como las de Firebase o POST)
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // 1. Si está en caché, devolverlo
+        // 1. Si está en caché, devolverlo (Rápido y Offline)
         if (response) {
           return response;
         }
         
-        // 2. Intentar red
+        // 2. Si no está en caché, intentar red
         return fetch(event.request).catch(() => {
-            // 3. SI FALLA LA RED Y ES UNA PÁGINA (HTML)
-            // Devolver siempre index.html (Esto arregla el error al recargar)
-            if (event.request.headers.get('accept').includes('text/html')) {
+            // 3. FALLBACK OFFLINE: Si falla la red...
+            
+            // Si la petición es una navegación a una página (HTML)
+            if (event.request.mode === 'navigate' || 
+                (event.request.method === 'GET' && event.request.headers.get('accept').includes('text/html'))) {
+                // Devolver siempre el index.html (App Shell)
                 return caches.match('./index.html');
             }
         });
