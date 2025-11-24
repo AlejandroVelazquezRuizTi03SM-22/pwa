@@ -1,109 +1,109 @@
-/**
- * UNISTOCK PWA - ARCHIVO PRINCIPAL DE LÓGICA
- * Autor: Alejandro Velázquez Ruiz
- * Universidad Tecnológica de San Juan del Río
- * Materia: Aplicaciones Web Progresivas
- */
+// ============================================================================
+// 1. CONFIGURACIÓN GLOBAL Y REFERENCIAS DOM
+// ============================================================================
 
-// =========================================================
-// 1. VARIABLES GLOBALES Y REFERENCIAS DOM
-// =========================================================
+// Referencias a elementos principales del HTML
 const mainContent = document.getElementById('content');
 const appNav = document.getElementById('app-nav');
 const connectionToast = document.getElementById('connection-toast');
 
-// Estado de la sesión
+// Estado de la sesión y usuario actual
 let currentUserRole = null; 
 let currentStudentId = localStorage.getItem('student_id') || '';
 
 // Claves para almacenamiento local (LocalStorage)
+// Se usan para persistencia de datos cuando no hay internet
 const INVENTORY_KEY = 'unistock_inventory';
 const CART_KEY = 'unistock_loan_cart';
-const PENDING_REQUESTS_KEY = 'unistock_pending_requests';
 
-// =========================================================
+
+// ============================================================================
 // 2. GESTIÓN DE CONECTIVIDAD (ONLINE/OFFLINE)
-// =========================================================
+// ============================================================================
 
 /**
- * Actualiza la barra visual de estado de conexión.
- * Se ejecuta al cargar la app y cuando cambia el estado de red.
+ * Monitor de Estado de Red.
+ * Muestra una barra visual cuando la conexión cambia.
  */
 function updateConnectionStatus() {
-    if (!connectionToast) return;
+    if (!connectionToast) return; // Protección si el elemento no existe
 
     if (navigator.onLine) {
-        // Estamos en línea
+        // Lógica cuando vuelve el internet
         connectionToast.textContent = "🟢 Conexión Restablecida - Sincronizando...";
         connectionToast.classList.add('online');
         connectionToast.classList.remove('hidden');
         
-        // Ocultar después de 3 segundos
+        // Ocultar la notificación después de 3 segundos
         setTimeout(() => {
             connectionToast.classList.add('hidden');
         }, 3000);
         
-        // Intento de resincronización silenciosa
+        // Intentar resincronizar inventario automáticamente
         getInventory(); 
     } else {
-        // Estamos sin conexión
+        // Lógica cuando se va el internet
         connectionToast.textContent = "🔴 Sin Conexión - Modo Offline Activo";
         connectionToast.classList.remove('online');
         connectionToast.classList.remove('hidden');
     }
 }
 
-// Escuchadores de eventos de red
+// Listeners para detectar cambios en tiempo real
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
 
-// =========================================================
+// ============================================================================
 // 3. GESTIÓN DE INVENTARIO (MODELO HÍBRIDO)
-// =========================================================
+// ============================================================================
 
 /**
- * Obtiene la lista de materiales.
- * Estrategia: Network First, falling back to Cache.
- * Si hay internet, baja de Firebase y actualiza el caché.
- * Si no hay internet, lee del caché local.
+ * Obtiene la lista de materiales disponibles.
+ * Implementa estrategia "Network First, falling back to Cache".
+ * * 1. Si hay internet: Descarga de Firestore (Nube) y actualiza el caché local.
+ * 2. Si no hay internet: Lee directamente del LocalStorage.
+ * * @returns {Array} Lista de objetos de inventario.
  */
 const getInventory = async () => {
-    // ESCENARIO 1: CONEXIÓN A FIREBASE (ONLINE)
+    // INTENTO 1: CONEXIÓN A FIREBASE (ONLINE)
     if (navigator.onLine && window.db && window.firebase) {
         try {
             console.log("[Inventario] Intentando descargar de Firestore...");
             const { collection, getDocs } = window.firebase;
+            
+            // Referencia a la colección 'inventory'
             const querySnapshot = await getDocs(collection(window.db, "inventory"));
             
             const remoteData = [];
             querySnapshot.forEach((doc) => {
+                // Combinamos el ID del documento con sus datos
                 remoteData.push({ 
                     id: doc.id, 
                     ...doc.data() 
                 });
             });
             
-            // Guardar la versión fresca en LocalStorage para uso futuro offline
+            // Guardamos la versión fresca en LocalStorage para uso futuro
             saveInventoryLocally(remoteData);
-            console.log(`[Inventario] ${remoteData.length} items sincronizados.`);
+            console.log(`[Inventario] Sincronizado exitosamente: ${remoteData.length} items.`);
             return remoteData;
             
         } catch (error) { 
-            console.warn("[Inventario] Error conectando a Firestore, usando caché:", error); 
+            console.warn("[Inventario] Error conectando a Firestore, cambiando a modo local:", error); 
         }
     }
     
-    // ESCENARIO 2: MODO OFFLINE (LOCALSTORAGE)
+    // INTENTO 2: MODO OFFLINE (LOCALSTORAGE)
     console.log("[Inventario] Cargando desde LocalStorage...");
     const localData = localStorage.getItem(INVENTORY_KEY);
     
-    // Datos de respaldo (Seed Data) si es la primera vez absoluta
+    // Datos de respaldo (Seed Data) por si es la primera vez absoluta y no hay red
     const backupData = [
         { 
             id: "demo-1", 
             name: "Multímetro Digital (Demo)", 
-            description: "Equipo precargado para demostración cuando no hay internet ni caché.", 
+            description: "Equipo precargado para demostración offline.", 
             available: 10, 
             total: 10, 
             tags: ["Laboratorio", "Demo"] 
@@ -114,29 +114,36 @@ const getInventory = async () => {
 };
 
 /**
- * Guarda el inventario en LocalStorage.
+ * Guarda el array de inventario en el almacenamiento del navegador.
  */
 const saveInventoryLocally = (data) => {
     localStorage.setItem(INVENTORY_KEY, JSON.stringify(data));
 };
 
 
-// =========================================================
+// ============================================================================
 // 4. GESTIÓN DEL CARRITO DE COMPRAS (LOCAL)
-// =========================================================
+// ============================================================================
 
+/**
+ * Recupera el carrito actual del almacenamiento local.
+ */
 const getCart = () => {
     const cartJSON = localStorage.getItem(CART_KEY);
     return cartJSON ? JSON.parse(cartJSON) : [];
 };
 
+/**
+ * Guarda el estado actual del carrito y actualiza la UI.
+ */
 const saveCart = (cart) => { 
     localStorage.setItem(CART_KEY, JSON.stringify(cart)); 
-    updateCartUI(); // Actualizar el contador visual
+    updateCartUI(); // Refresca contadores en la barra de navegación
 };
 
 /**
  * Agrega un ítem al carrito validando existencias.
+ * @param {string} id - ID del producto a agregar.
  */
 const addToCart = async (id) => {
     const inventory = await getInventory();
@@ -151,21 +158,21 @@ const addToCart = async (id) => {
     let itemInCart = cart.find(i => i.id === id);
 
     if(itemInCart) {
-        // Validar stock máximo
+        // Validar que no pida más de lo que hay disponible físicamente
         if(itemInCart.quantity < product.available) { 
             itemInCart.quantity++; 
-            alert(`✅ Se añadió otra unidad. Tienes ${itemInCart.quantity} en la solicitud.`); 
+            alert(`✅ Cantidad actualizada. Tienes ${itemInCart.quantity} unidades en la solicitud.`); 
         } else { 
             alert(`⚠️ Stock insuficiente. Solo hay ${product.available} unidades disponibles para préstamo.`); 
             return;
         }
     } else {
-        // Nuevo ítem
+        // Nuevo ítem en el carrito
         cart.push({ 
             id: product.id, 
             name: product.name, 
             quantity: 1, 
-            max: product.available 
+            max: product.available // Guardamos el max para validaciones futuras en el formulario
         });
         alert(`✅ "${product.name}" agregado a la solicitud.`);
     }
@@ -173,30 +180,32 @@ const addToCart = async (id) => {
 };
 
 /**
- * Elimina un ítem del carrito.
+ * Elimina un ítem específico del carrito.
  */
 const removeFromCart = (id) => {
-    if(!confirm("¿Eliminar este artículo de la solicitud?")) return;
+    if(!confirm("¿Estás seguro de eliminar este artículo de la solicitud?")) return;
     
     let cart = getCart().filter(i => i.id !== id);
     saveCart(cart);
     
-    // Si estamos en la vista del formulario, recargar para reflejar cambios
-    const loanForm = document.getElementById('loan-form');
-    if(loanForm) {
+    // Si estamos en la vista del formulario, recargar para reflejar cambios visualmente
+    if(document.getElementById('loan-form')) {
         renderRequestForm();
     }
 };
 
+/**
+ * Vacía el carrito completo (usado al finalizar préstamo).
+ */
 const clearCart = () => {
     localStorage.removeItem(CART_KEY);
     updateCartUI();
 };
 
 
-// =========================================================
+// ============================================================================
 // 5. SISTEMA DE AUTENTICACIÓN Y NAVEGACIÓN
-// =========================================================
+// ============================================================================
 
 /**
  * Inicializa la aplicación al cargar la página.
@@ -205,7 +214,7 @@ window.initApp = function() {
     console.log("[App] Inicializando...");
     updateConnectionStatus();
     
-    // Recuperar sesión persistente
+    // Recuperar sesión persistente si existe
     const storedRole = localStorage.getItem('user_role');
     if(storedRole) {
         currentUserRole = storedRole;
@@ -216,12 +225,13 @@ window.initApp = function() {
 };
 
 /**
- * Actualiza la barra de navegación según el rol.
+ * Actualiza la barra de navegación según el rol del usuario.
  */
 const updateNav = () => {
     if(!appNav) return;
 
     if(currentUserRole === 'admin') {
+        // MENÚ DE ADMINISTRADOR
         appNav.innerHTML = `
             <a href="#" onclick="navigateTo('admin_dashboard')">📊 Dashboard</a>
             <a href="#" onclick="navigateTo('admin_inventory')">📦 Inventario</a>
@@ -229,9 +239,10 @@ const updateNav = () => {
             <a href="#" onclick="navigateTo('admin_active_loans')">🔄 Activos</a>
             <a href="#" onclick="logout()" style="background-color:#D32F2F;">Salir</a>
         `;
-        // Redirección automática si estamos en login
+        // Redirección automática si estamos en la pantalla de login
         if(document.getElementById('login-container')) navigateTo('admin_dashboard');
     } else if (currentUserRole === 'student') {
+        // MENÚ DE ALUMNO
         appNav.innerHTML = `
             <a href="#" onclick="navigateTo('student_consult')">🔍 Material</a>
             <a href="#" onclick="navigateTo('student_request_form')">🛒 Solicitud (${getCart().length})</a>
@@ -244,6 +255,7 @@ const updateNav = () => {
 
 /**
  * Maneja el inicio de sesión desde los inputs HTML.
+ * @param {string} role - 'admin' o 'student'
  */
 window.login = (role) => {
     // --- LOGIN ADMINISTRADOR ---
@@ -254,7 +266,7 @@ window.login = (role) => {
         if (passInput) {
              password = passInput.value;
         } else {
-             // Fallback por si el input no existe en el DOM
+             // Fallback por si se llama desde consola o error de carga
              password = prompt("Ingrese Contraseña de Administrador:");
         }
 
@@ -284,27 +296,30 @@ window.login = (role) => {
         localStorage.setItem('student_id', matricula);
     }
 
-    // Guardar sesión
+    // Guardar sesión y actualizar interfaz
     currentUserRole = role;
     localStorage.setItem('user_role', role);
     updateNav();
 };
 
+/**
+ * Cierra la sesión y limpia credenciales temporales.
+ */
 window.logout = () => {
     if(confirm("¿Seguro que deseas cerrar sesión?")) {
         currentUserRole = null;
         localStorage.removeItem('user_role');
-        // No borramos student_id para comodidad del usuario
-        location.reload(); // Recarga limpia
+        // No borramos student_id para comodidad del usuario en futuros accesos
+        location.reload(); // Recarga limpia para borrar estados en memoria
     }
 };
 
 /**
- * Router SPA (Single Page Application)
+ * Router SPA (Single Page Application).
  * Maneja el cambio de vistas sin recargar la página.
  */
 window.navigateTo = async (view) => {
-    // Spinner de carga
+    // Mostrar spinner de carga
     mainContent.innerHTML = `
         <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:50px;">
             <div style="border: 4px solid #f3f3f3; border-top: 4px solid #1A237E; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
@@ -313,7 +328,7 @@ window.navigateTo = async (view) => {
         </div>
     `;
     
-    // Pequeño delay para UX (evita parpadeo instantáneo)
+    // Pequeño delay para dar sensación de proceso (mejora UX)
     await new Promise(r => setTimeout(r, 100));
 
     try {
@@ -328,7 +343,7 @@ window.navigateTo = async (view) => {
             case 'student_history': 
                 await renderStudentHistory(); 
                 break;
-                
+            
             // --- VISTAS ADMIN ---
             case 'admin_dashboard': 
                 await renderAdminDashboard(); 
@@ -342,36 +357,35 @@ window.navigateTo = async (view) => {
             case 'admin_active_loans': 
                 await renderAdminActiveLoans(); 
                 break;
-                
+            
             default: 
                 mainContent.innerHTML = "<h2>Error 404: Vista no encontrada</h2><button onclick='location.reload()'>Volver al Inicio</button>";
         }
     } catch (error) {
-        console.error("Error en navegación:", error);
+        console.error("Error crítico en navegación:", error);
         mainContent.innerHTML = `<h2>Error al cargar la vista</h2><p>${error.message}</p>`;
     }
 };
 
 
-// =========================================================
-// 6. LÓGICA DE VISTAS: ALUMNO
-// =========================================================
+// ============================================================================
+// 6. LÓGICA DE VISTAS: PERFIL ALUMNO
+// ============================================================================
 
 /**
- * Vista principal de consulta de material.
+ * Renderiza la vista de consulta de material con buscador.
  */
 const renderStudentConsultation = async () => {
     const items = await getInventory();
     
     mainContent.innerHTML = `
         <h2>Consulta de Material</h2>
-        
         <div class="search-container">
             <input type="text" id="search" class="search-input" placeholder="🔍 Buscar por nombre, carrera, etiqueta...">
         </div>
         
         <div id="list" class="inventory-list">
-            <!-- Renderizado dinámico -->
+            <!-- Aquí se inyectan las tarjetas dinámicamente -->
         </div>
         
         <!-- Botón Flotante (FAB) -->
@@ -383,10 +397,7 @@ const renderStudentConsultation = async () => {
     const drawList = (list) => {
         const container = document.getElementById('list');
         if(!list || list.length === 0) {
-            container.innerHTML = `
-                <div style="grid-column: 1/-1; text-align:center; padding:40px; color:#777;">
-                    <p>No se encontraron materiales con ese criterio.</p>
-                </div>`;
+            container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding:40px; color:#777;"><p>No se encontraron materiales con ese criterio.</p></div>`;
             return;
         }
         
@@ -411,7 +422,7 @@ const renderStudentConsultation = async () => {
             </div>`).join('');
     };
 
-    // Carga inicial
+    // Carga inicial de la lista
     drawList(items);
 
     // Evento de búsqueda en tiempo real
@@ -431,22 +442,23 @@ const renderStudentConsultation = async () => {
 };
 
 const updateCartUI = () => {
-    // Actualizar texto del botón del menú
+    // Actualizar texto del botón del menú si estamos en modo alumno
     const links = document.querySelectorAll('nav a');
     if(links.length > 1 && currentUserRole === 'student') {
         links[1].innerText = `Solicitud (${getCart().length})`;
     }
-    // Actualizar botón flotante si existe
+    // Actualizar botón flotante si existe en la vista actual
     const fab = document.getElementById('fab-cart');
     if(fab) fab.innerText = `📋 Ver Solicitud (${getCart().length})`;
 };
 
 /**
- * Vista de Formulario de Préstamo (Carrito + Datos).
+ * Renderiza el formulario detallado de préstamo.
  */
 const renderRequestForm = () => {
     const cart = getCart();
     
+    // Si el carrito está vacío, mostramos mensaje y botón de regreso
     if(cart.length === 0) {
         mainContent.innerHTML = `
             <div style="text-align:center; margin-top:50px; padding:20px;">
@@ -459,6 +471,7 @@ const renderRequestForm = () => {
         return;
     }
     
+    // Fecha sugerida (hoy)
     const today = new Date().toISOString().split('T')[0];
 
     mainContent.innerHTML = `
@@ -482,7 +495,7 @@ const renderRequestForm = () => {
                 <button class="btn-secondary" onclick="navigateTo('student_consult')" style="margin-top:15px;">+ Agregar más material</button>
             </div>
 
-            <!-- Columna 2: Formulario Administrativo -->
+            <!-- Columna 2: Formulario Administrativo Completo -->
             <div class="form-section">
                 <h3>2. Datos del Préstamo</h3>
                 <form id="loan-form">
@@ -514,9 +527,9 @@ const renderRequestForm = () => {
             </div>
         </div>
         
-        <!-- ÁREA DE RESULTADO (TOKEN) -->
+        <!-- ÁREA DE RESULTADO (TOKEN/QR) -->
         <div id="result-area" style="display:none; text-align:center; margin-top:30px; background:white; padding:30px; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
-            <!-- Se inyecta dinámicamente -->
+            <!-- Se inyecta dinámicamente tras procesar la solicitud -->
         </div>
     `;
 
@@ -524,7 +537,7 @@ const renderRequestForm = () => {
     document.getElementById('loan-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        // Recopilar datos completos
+        // Recopilar todos los datos del formulario
         const requestData = {
             studentName: document.getElementById('s-name').value,
             studentId: currentStudentId,
@@ -550,13 +563,13 @@ const renderRequestForm = () => {
         let generatedCode = null;
         let isOnline = false;
 
+        // INTENTO ONLINE: Guardar en 'requests' y obtener Código Corto
         if (navigator.onLine && window.db && window.firebase) {
             try {
                 // Generar Código Corto (Ej: P-4821)
                 const shortCode = "P-" + Math.floor(1000 + Math.random() * 9000);
                 const { collection, addDoc } = window.firebase;
                 
-                // Guardar en colección 'requests'
                 await addDoc(collection(window.db, "requests"), {
                     ...requestData,
                     code: shortCode,
@@ -572,7 +585,7 @@ const renderRequestForm = () => {
             }
         }
 
-        // RENDERIZAR RESULTADO
+        // RENDERIZAR RESULTADO SEGÚN CONECTIVIDAD
         if (isOnline) {
             // Opción A: Éxito Online (Código Corto)
             resultArea.innerHTML = `
@@ -582,15 +595,14 @@ const renderRequestForm = () => {
                 <div class="big-code">${generatedCode}</div>
                 
                 <p style="font-size:0.9em; color:#666; margin-top:20px;">
-                    Tu solicitud ha sido guardada en la nube. <br>
+                    Tu solicitud con ${cart.length} materiales ha sido guardada en la nube. <br>
                     El encargado la verá en su pantalla al ingresar el código.
                 </p>
                 <button onclick="finishStudentProcess()" class="btn-secondary" style="margin-top:20px;">Finalizar y Salir</button>
             `;
         } else {
-            // Opción B: Fallback Offline (Token JSON)
+            // Opción B: Fallback Offline (Token JSON Texto)
             const jsonStr = JSON.stringify(requestData);
-            const base64Str = btoa(jsonStr); // Codificar para que sea un string seguro
             
             resultArea.innerHTML = `
                 <h2 style="color:#E65100; font-size:2em;">⚠️ Modo Sin Conexión</h2>
@@ -616,10 +628,12 @@ const renderRequestForm = () => {
     });
 };
 
+/**
+ * Copia el token al portapapeles.
+ */
 window.copyToken = () => {
     const textArea = document.getElementById('offline-token');
     textArea.select();
-    document.execCommand('copy'); // Fallback para móviles viejos
     navigator.clipboard.writeText(textArea.value).then(() => alert("✅ Token copiado al portapapeles."));
 };
 
@@ -644,12 +658,11 @@ const renderStudentHistory = async () => {
             const { collection, query, where, getDocs } = window.firebase;
             // Buscar préstamos donde studentId == currentStudentId
             const q = query(collection(window.db, "loans"), where("studentId", "==", currentStudentId));
-            
-            const querySnapshot = await getDocs(q);
+            const snap = await getDocs(q);
             const history = [];
-            querySnapshot.forEach((doc) => history.push({ firestoreId: doc.id, ...doc.data() }));
+            snap.forEach(d => history.push({id:d.id, ...d.data()}));
             
-            // Ordenar por fecha descendente
+            // Ordenar por fecha descendente (más reciente primero)
             history.sort((a, b) => b.timestamp - a.timestamp);
 
             if (history.length === 0) {
@@ -664,12 +677,12 @@ const renderStudentHistory = async () => {
                         <div class="material-card history-card">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                                 <strong>📅 ${new Date(loan.timestamp).toLocaleDateString()}</strong>
-                                <span class="tag" style="background:${loan.status === 'active' ? '#FFEB3B' : '#C8E6C9'}; color:#333;">
-                                    ${loan.status === 'active' ? '⏳ En Curso' : '✅ Devuelto'}
+                                <span class="tag" style="background:${loan.status==='active'?'#FFEB3B':'#C8E6C9'}; color:#333;">
+                                    ${loan.status==='active'?'⏳ En Curso':'✅ Devuelto'}
                                 </span>
                             </div>
                             <p style="margin:0; font-size:0.9em;"><strong>Aula:</strong> ${loan.aula}</p>
-                            <p style="margin:0 0 10px 0; font-size:0.9em;"><strong>Profesor:</strong> ${loan.professor || 'No esp.'}</p>
+                            <p style="margin:0 0 10px 0; font-size:0.9em;"><strong>Profesor:</strong> ${loan.professor || 'No especificado'}</p>
                             <hr style="border:0; border-top:1px solid #eee;">
                             <ul style="padding-left:20px; margin-bottom:0; color:#555;">
                                 ${loan.items.map(i => `<li>${i.name} (x${i.quantity})</li>`).join('')}
@@ -687,19 +700,17 @@ const renderStudentHistory = async () => {
 };
 
 
-// =========================================================
-// 7. LÓGICA DE VISTAS: ADMINISTRADOR
-// =========================================================
+// ============================================================================
+// 7. LÓGICA DE VISTAS: PERFIL ADMINISTRADOR
+// ============================================================================
 
-/**
- * Vista de Validación de Préstamos (Punto de venta/entrega).
- */
+// --- VALIDACIÓN DE PRÉSTAMOS (PUNTO DE ENTREGA) ---
 const renderAdminValidate = () => {
     mainContent.innerHTML = `
         <h2>✅ Validar y Entregar Préstamo</h2>
         
         <div class="admin-form">
-            <!-- OPCIÓN A: CÓDIGO CORTO -->
+            <!-- OPCIÓN A: CÓDIGO CORTO (ONLINE) -->
             <div style="background:#E8F5E9; padding:15px; border-radius:8px; margin-bottom:20px; border: 1px solid #C8E6C9;">
                 <h3 style="margin-top:0; color:#2E7D32;">Opción A: Código Online</h3>
                 <p style="font-size:0.9em; margin-bottom:10px;">Ingresa el código corto que le apareció al alumno (Ej: P-1234).</p>
@@ -709,7 +720,7 @@ const renderAdminValidate = () => {
                 </div>
             </div>
 
-            <!-- OPCIÓN B: TOKEN OFFLINE -->
+            <!-- OPCIÓN B: TOKEN OFFLINE (TEXTO) -->
             <div style="background:#FFF3E0; padding:15px; border-radius:8px; border: 1px solid #FFE0B2;">
                 <h3 style="margin-top:0; color:#E65100;">Opción B: Token Offline</h3>
                 <p style="font-size:0.9em; margin-bottom:10px;">Si el alumno no tiene internet, pega aquí el token de texto que generó su celular:</p>
@@ -733,7 +744,6 @@ window.searchByCode = async () => {
     if (navigator.onLine && window.db && window.firebase) {
         try {
             const { collection, query, where, getDocs } = window.firebase;
-            // Buscar en 'requests' donde code == input y status == pending
             const q = query(collection(window.db, "requests"), where("code", "==", code), where("status", "==", "pending"));
             const snap = await getDocs(q);
 
@@ -928,7 +938,7 @@ const renderAdminActiveLoans = async () => {
     }
 };
 
-// Función para devolver material
+// Función para procesar la devolución
 window.returnLoan = async (loanId) => {
     if (!confirm("¿Confirmar que el alumno devolvió todo el material?")) return;
 
@@ -957,7 +967,7 @@ window.returnLoan = async (loanId) => {
             await updateDoc(loanRef, { status: 'returned', returnDate: Date.now() });
 
             alert("✅ Material devuelto y stock actualizado.");
-            renderAdminActiveLoans(); // Recargar
+            renderAdminActiveLoans(); // Recargar la lista
 
         } catch (e) {
             console.error(e);
@@ -1014,10 +1024,10 @@ const renderAdminDashboard = async () => {
     `;
 };
 
-// --- ADMIN GESTIÓN DE INVENTARIO (ALTA) ---
+// --- ADMIN GESTIÓN DE INVENTARIO (ALTA Y REABASTECIMIENTO) ---
 const renderAdminInventory = async () => {
     mainContent.innerHTML = `
-        <h2>Gestión de Inventario</h2>
+        <h2>Gestión Inventario</h2>
         
         <form id="add-form" class="admin-form">
             <h3>Alta de Nuevo Material</h3>
@@ -1042,7 +1052,11 @@ const renderAdminInventory = async () => {
     const items = await getInventory();
     document.getElementById('adm-list').innerHTML = items.map(i => `
         <div class="material-card">
-            <h3>${i.name}</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">${i.name}</h3>
+                <!-- BOTÓN NUEVO: REABASTECER -->
+                <button onclick="addStockToProduct('${i.id}', '${i.name}')" style="width:auto; padding:5px 10px; background:#0288D1; font-size:0.9em; margin-top:0;">➕ Stock</button>
+            </div>
             <p><strong>Disp:</strong> ${i.available} / ${i.total}</p>
             <div class="tags-container">
                 ${i.tags ? i.tags.map(t=>`<span class="tag">${t}</span>`).join('') : ''}
@@ -1075,6 +1089,40 @@ const renderAdminInventory = async () => {
             alert("⚠️ No se puede añadir material en modo Offline. Conéctate para gestionar el inventario.");
         }
     });
+};
+
+// FUNCIÓN: AÑADIR STOCK A EXISTENTE
+window.addStockToProduct = async (id, name) => {
+    const qtyStr = prompt(`¿Cuántas unidades nuevas llegaron de "${name}"?`);
+    if (!qtyStr) return;
+    const qty = parseInt(qtyStr);
+    
+    if (isNaN(qty) || qty <= 0) return alert("Cantidad inválida");
+
+    if (navigator.onLine && window.db && window.firebase) {
+        const { doc, getDoc, updateDoc } = window.firebase;
+        try {
+            const ref = doc(window.db, "inventory", id);
+            const snap = await getDoc(ref);
+            if (snap.exists()) {
+                const currentTotal = snap.data().total || 0;
+                const currentAvail = snap.data().available || 0;
+                
+                await updateDoc(ref, {
+                    total: currentTotal + qty,
+                    available: currentAvail + qty
+                });
+                
+                alert(`✅ Se agregaron ${qty} unidades al inventario.`);
+                renderAdminInventory(); // Recargar vista
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error al actualizar stock en la nube.");
+        }
+    } else {
+        alert("Necesitas internet para actualizar el stock.");
+    }
 };
 
 // --------------------------------------------------------------------------------
