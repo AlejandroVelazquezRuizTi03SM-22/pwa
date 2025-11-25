@@ -1,3 +1,4 @@
+// --------------------------------------------------------------------------------
 // 1. CONFIGURACIÓN GLOBAL
 // --------------------------------------------------------------------------------
 const mainContent = document.getElementById('content');
@@ -6,7 +7,7 @@ let currentStudentId = localStorage.getItem('student_id') || '';
 
 const INVENTORY_KEY = 'unistock_inventory';
 const CART_KEY = 'unistock_loan_cart';
-const ACTIVE_REQUEST_KEY = 'unistock_active_request';
+const ACTIVE_REQUEST_KEY = 'unistock_active_request'; // Clave para persistencia del token
 
 // --------------------------------------------------------------------------------
 // 2. GESTIÓN DE CONECTIVIDAD
@@ -91,10 +92,11 @@ const clearCart = () => { localStorage.removeItem(CART_KEY); updateCartUI(); };
 // --------------------------------------------------------------------------------
 window.initApp = function () {
     updateConnectionStatus();
-    // SIEMPRE iniciar en login: Limpiamos rol y no restauramos sesión
-    localStorage.removeItem('user_role');
-    currentUserRole = null;
-    // No llamamos a updateNav() para que se quede en el HTML original (Login)
+    if (localStorage.getItem('user_role')) {
+        currentUserRole = localStorage.getItem('user_role');
+        currentStudentId = localStorage.getItem('student_id') || '';
+        updateNav();
+    }
 };
 
 const updateNav = () => {
@@ -135,11 +137,6 @@ window.login = (role) => {
 
         currentStudentId = matricula;
         localStorage.setItem('student_id', matricula);
-    }
-
-    // SOLICITAR PERMISO NOTIFICACIONES
-    if ('Notification' in window && Notification.permission !== 'granted') {
-        Notification.requestPermission();
     }
 
     currentUserRole = role;
@@ -283,21 +280,7 @@ const renderRequestForm = () => {
             } catch (err) { console.log("Offline fallback"); }
         }
 
-        // Generar código offline si no se pudo online
-        if (!tokenInfo.code) {
-            tokenInfo.code = "OFF-" + Math.floor(1000 + Math.random() * 9000);
-        }
-
         localStorage.setItem(ACTIVE_REQUEST_KEY, JSON.stringify(tokenInfo));
-
-        // NOTIFICACIÓN LOCAL
-        if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification("✅ Solicitud Generada", {
-                body: `Tu código ${tokenInfo.code} está listo.`,
-                icon: './images/icon.png'
-            });
-        }
-
         clearCart();
         renderActiveTokenView();
     });
@@ -305,23 +288,43 @@ const renderRequestForm = () => {
 
 const renderActiveTokenView = () => {
     const savedToken = localStorage.getItem(ACTIVE_REQUEST_KEY);
-    if (!savedToken) return mainContent.innerHTML = "<h2>No hay solicitud activa</h2>";
-    const tokenInfo = JSON.parse(savedToken);
+    if (!savedToken) return navigateTo('student_consult');
+
+    const token = JSON.parse(savedToken);
+    const data = token.data;
 
     mainContent.innerHTML = `
-        <div style="text-align:center; padding:20px;">
-            <h2>Tu Código de Préstamo</h2>
-            <div style="background:#f5f5f5; padding:20px; border-radius:10px; display:inline-block; margin:20px 0; border: 2px dashed #333;">
-                <h1 style="font-size: 3em; margin: 0; letter-spacing: 5px; color: #1A237E;">${tokenInfo.code}</h1>
-                <p style="margin-top:10px; color:#666;">${tokenInfo.type === 'online' ? 'Sincronizado' : 'Modo Offline'}</p>
+        <div style="max-width:600px; margin:0 auto; background:white; padding:20px; border-radius:10px; text-align:center;">
+            <h2 style="color:${token.type === 'online' ? '#009688' : '#E65100'}">
+                ${token.type === 'online' ? '✅ Solicitud Enviada' : '⚠️ Token Offline'}
+            </h2>
+            
+            ${token.type === 'online'
+            ? `<div class="big-code">${token.code}</div><p style="color:#666; margin-top:20px;">Guardado en la nube.</p>`
+            : `<canvas id="qrcode" style="margin:15px auto;"></canvas><p style="color:#666;">Escanea este QR para validar.</p>`
+        }
+
+            <div style="background:#f9f9f9; padding:10px; text-align:left; margin-top:20px;">
+                <p><strong>Resumen:</strong></p>
+                <ul>${data.items.map(i => `<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
             </div>
-            <p>Muestra este código al administrador.</p>
-            <button onclick="if(confirm('¿Cancelar solicitud?')){ localStorage.removeItem(ACTIVE_REQUEST_KEY); navigateTo('student_consult'); }" 
-                style="background-color:#D32F2F; color:white; border:none; padding:10px 20px; border-radius:5px; margin-top:20px;">
-                Cancelar / Finalizar
+
+            <button onclick="finishToken()" class="btn-secondary" style="margin-top:20px; color:#D32F2F; border-color:#D32F2F;">
+                ❌ Cerrar Solicitud
             </button>
         </div>
     `;
+
+    if (token.type === 'offline' && window.QRCode) {
+        setTimeout(() => QRCode.toCanvas(document.getElementById('qrcode'), JSON.stringify(data), { width: 250 }), 100);
+    }
+};
+
+window.finishToken = () => {
+    if (confirm("¿Cerrar solicitud?")) {
+        localStorage.removeItem(ACTIVE_REQUEST_KEY);
+        navigateTo('student_consult');
+    }
 };
 
 const renderStudentHistory = async () => {
@@ -352,7 +355,7 @@ const renderAdminValidate = () => {
         <h2>Validar Préstamo</h2>
         <div class="admin-form" style="text-align:center;">
             <h3>Ingresa Código de Alumno</h3>
-            <p style="font-size:0.9em; margin-bottom:10px; color:#666;">(Ej: P-1234)</p>
+            <p>(Ej: P-1234)</p>
             <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
                 <input type="text" id="verify-code" placeholder="P-XXXX" style="font-size:1.5em; text-align:center; text-transform:uppercase; width:200px;">
                 <button onclick="searchByCode()" class="btn-primary" style="width:auto;">Buscar</button>
@@ -383,7 +386,6 @@ const showConfirmation = (data) => {
         <div style="background:white; padding:20px; border:2px solid #1A237E; margin-top:20px; border-radius:8px;">
             <h3>Confirmar Entrega</h3>
             <p><strong>${data.studentName}</strong> (${data.studentId})</p>
-            <p>Aula: ${data.aula}</p>
             <ul>${data.items.map(i => `<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
             <button onclick="confirmLoan()" class="btn-primary" style="background:green; margin-top:15px;">ENTREGAR MATERIAL</button>
         </div>`;
@@ -406,7 +408,6 @@ window.confirmLoan = async () => {
     }
 };
 
-// --- ACTIVOS Y DEVOLUCIÓN ---
 const renderAdminActiveLoans = async () => {
     mainContent.innerHTML = `<h2>Préstamos Activos</h2><p>Cargando...</p>`;
     if (navigator.onLine && window.db && window.firebase) {
@@ -449,7 +450,6 @@ window.returnLoan = async (loanId) => {
     }
 };
 
-// --- DASHBOARD ---
 const renderAdminDashboard = async () => {
     const barsHtml = [12, 19, 8, 15, 22].map((v, i) => `<div class="chart-bar-container"><div class="chart-bar ${i == 4 ? 'bar-peak' : ''}" style="height:${(v / 22) * 100}%;"><span class="chart-tooltip">${v}</span></div><span class="chart-label">${['L', 'M', 'M', 'J', 'V'][i]}</span></div>`).join('');
     const inv = await getInventory();
@@ -465,7 +465,6 @@ const renderAdminDashboard = async () => {
     `;
 };
 
-// --- GESTIÓN INVENTARIO ---
 const renderAdminInventory = async () => {
     mainContent.innerHTML = `
         <h2>Gestión Inventario</h2>
@@ -521,5 +520,4 @@ window.addStockToProduct = async (id, name) => {
     } else alert("Error");
 };
 
-// 8. SERVICE WORKER
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unistock-v12-no-qr'; // Incrementamos versión
+const CACHE_NAME = 'unistock-v15-final'; // Versión final
 
 const urlsToCache = [
   '/',
@@ -7,73 +7,53 @@ const urlsToCache = [
   '/js/app.js',
   '/manifest.json',
   '/images/icon.png',
-  '/images/utsjr.png'
+  '/images/utsjr.png',
+  'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js'
 ];
 
-// INSTALACIÓN
 self.addEventListener('install', event => {
-  self.skipWaiting(); // Fuerza al SW a activarse de inmediato
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('[SW] Cacheando archivos críticos...');
+        console.log('[SW] Cacheando...');
         return cache.addAll(urlsToCache);
       })
-      .catch(err => console.error('[SW] Error en instalación:', err))
+      .catch(err => console.error('[SW] Error:', err))
   );
 });
 
-// ACTIVACIÓN
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('[SW] Borrando caché antigua:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
     })
   );
-  return self.clients.claim(); // Toma control de la página inmediatamente
+  return self.clients.claim();
 });
 
-// INTERCEPCIÓN DE RED (MEJORADA)
 self.addEventListener('fetch', event => {
-  // Ignoramos peticiones que no sean GET
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
     (async () => {
       try {
-        // 1. Intentar buscar en caché primero (Cache First)
-        const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
-        if (cachedResponse) {
-          return cachedResponse;
-        }
+        const cachedResponse = await caches.match(event.request);
+        if (cachedResponse) return cachedResponse;
 
-        // 2. Si no está en caché, intentar red
-        const networkResponse = await fetch(event.request);
-        return networkResponse;
-
+        return await fetch(event.request);
       } catch (error) {
-        // 3. FALLBACK OFFLINE
-        console.log('[SW] Fallo de red, intentando fallback offline para:', event.request.url);
-
-        // Si es una navegación (HTML)
-        if (event.request.mode === 'navigate' ||
-          (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
-
-          // Intentar devolver index.html desde caché
+        if (event.request.mode === 'navigate') {
           const cache = await caches.open(CACHE_NAME);
-          const cachedIndex = await cache.match('/index.html');
-          return cachedIndex || cache.match('/');
+          const index = await cache.match('/index.html');
+          return index || cache.match('/');
         }
-
-        // Para otros recursos, devolver un error 404 o una respuesta vacía válida para evitar "Failed to convert value to 'Response'"
-        return new Response('Offline', { status: 404, statusText: 'Offline' });
       }
     })()
   );

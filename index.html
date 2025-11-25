@@ -6,12 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniStock PWA | Inventario UTSJR</title>
 
-    <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" href="./images/icon.png">
+    <meta name="theme-color" content="#1A237E">
+    <link rel="stylesheet" href="./css/style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBDfQ1h_JzLtPvKxOk-m1XCVcER8L_so7U",
@@ -29,16 +34,12 @@
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-
                 window.db = db;
                 window.auth = auth;
                 window.firebase = { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc };
-
                 await signInAnonymously(auth);
                 console.log("✅ Conectado a Firebase");
-
                 if (typeof window.initApp === 'function') window.initApp();
-
             } catch (error) {
                 console.log("⚠️ Modo Offline activo");
                 if (typeof window.initApp === 'function') window.initApp();
@@ -51,7 +52,8 @@
     <div id="connection-toast" class="toast hidden">🔴 Sin Conexión - Modo Offline</div>
 
     <header>
-        <h1><img src="./images/utsjr_logo.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
+        <!-- CORRECCIÓN DE IMAGEN -->
+        <h1><img src="./images/utsjr.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
         <nav id="app-nav"></nav>
     </header>
 
