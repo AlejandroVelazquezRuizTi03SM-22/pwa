@@ -267,16 +267,29 @@ const renderRequestForm = () => {
         resultArea.style.display = 'block';
         resultArea.innerHTML = `<p>Procesando...</p>`;
 
-        let tokenInfo = { type: 'offline', code: null, data: requestData };
+        // Generar código siempre (Online u Offline)
+        const shortCode = "P-" + Math.floor(1000 + Math.random() * 9000);
+        let tokenInfo = { type: 'offline', code: shortCode, data: requestData };
+
+        // Notificación Push Local
+        if ("Notification" in window) {
+            if (Notification.permission === "granted") {
+                new Notification("Pedido Generado", { body: `Tu código es ${shortCode}` });
+            } else if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        new Notification("Pedido Generado", { body: `Tu código es ${shortCode}` });
+                    }
+                });
+            }
+        }
 
         if (navigator.onLine && window.db && window.firebase) {
             try {
-                const shortCode = "P-" + Math.floor(1000 + Math.random() * 9000);
                 await window.firebase.addDoc(window.firebase.collection(window.db, "requests"), {
                     ...requestData, code: shortCode, status: 'pending'
                 });
                 tokenInfo.type = 'online';
-                tokenInfo.code = shortCode;
             } catch (err) { console.log("Offline fallback"); }
         }
 
@@ -299,10 +312,10 @@ const renderActiveTokenView = () => {
                 ${token.type === 'online' ? '✅ Solicitud Enviada' : '⚠️ Token Offline'}
             </h2>
             
-            ${token.type === 'online'
-            ? `<div class="big-code">${token.code}</div><p style="color:#666; margin-top:20px;">Guardado en la nube.</p>`
-            : `<canvas id="qrcode" style="margin:15px auto;"></canvas><p style="color:#666;">Escanea este QR para validar.</p>`
-        }
+            <div class="big-code">${token.code}</div>
+            <p style="color:#666; margin-top:20px;">
+                ${token.type === 'online' ? 'Guardado en la nube.' : 'Guardado localmente (Offline).'}
+            </p>
 
             <div style="background:#f9f9f9; padding:10px; text-align:left; margin-top:20px;">
                 <p><strong>Resumen:</strong></p>
@@ -315,9 +328,7 @@ const renderActiveTokenView = () => {
         </div>
     `;
 
-    if (token.type === 'offline' && window.QRCode) {
-        setTimeout(() => QRCode.toCanvas(document.getElementById('qrcode'), JSON.stringify(data), { width: 250 }), 100);
-    }
+
 };
 
 window.finishToken = () => {
