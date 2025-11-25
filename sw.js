@@ -1,13 +1,13 @@
-const CACHE_NAME = 'unistock-v9-offline-fix'; // Incrementamos versión para forzar actualización
+const CACHE_NAME = 'unistock-v10-offline-fix'; // Incrementamos versión
 
 const urlsToCache = [
-  './',
-  './index.html',
-  './css/style.css',
-  './js/app.js',
-  './manifest.json',
-  './images/icon.png',
-  './images/utsjr_logo.png'
+  '/',
+  '/index.html',
+  '/css/style.css',
+  '/js/app.js',
+  '/manifest.json',
+  '/images/icon.png',
+  '/images/utsjr_logo.png'
 ];
 
 // INSTALACIÓN
@@ -45,11 +45,10 @@ self.addEventListener('fetch', event => {
   // Ignoramos peticiones que no sean GET
   if (event.request.method !== 'GET') return;
 
-  // Estrategia: Cache First, falling back to Network, falling back to Offline Page
   event.respondWith(
     (async () => {
       try {
-        // 1. Intentar buscar en caché
+        // 1. Intentar buscar en caché primero (Cache First)
         const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
         if (cachedResponse) {
           return cachedResponse;
@@ -60,18 +59,18 @@ self.addEventListener('fetch', event => {
         return networkResponse;
 
       } catch (error) {
-        // 3. FALLBACK OFFLINE: Si falla la red (y no estaba en caché)
+        // 3. FALLBACK OFFLINE
         console.log('[SW] Fallo de red, intentando fallback offline para:', event.request.url);
 
-        // Si la petición es una navegación a una página (HTML)
-        if (event.request.mode === 'navigate' || 
-            (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
-            // Devolver siempre el index.html (App Shell)
-            const indexCache = await caches.match('./index.html');
-            return indexCache || caches.match('./'); // Intento doble por seguridad
+        // Si es una navegación (HTML)
+        if (event.request.mode === 'navigate' ||
+          (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
+
+          // Intentar devolver index.html desde caché
+          const cache = await caches.open(CACHE_NAME);
+          const cachedIndex = await cache.match('/index.html');
+          return cachedIndex || cache.match('/');
         }
-        
-        // Aquí podrías retornar una imagen placeholder si falla una imagen, etc.
       }
     })()
   );
