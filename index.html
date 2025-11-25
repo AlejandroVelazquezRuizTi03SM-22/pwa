@@ -1,19 +1,27 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniStock PWA | Inventario UTSJR</title>
 
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/style.css">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+
         const firebaseConfig = {
-          apiKey: "AIzaSyBDfQ1h_JzLtPvKxOk-m1XCVcER8L_so7U",
-          authDomain: "unistock-pwa.firebaseapp.com",
-          projectId: "unistock-pwa",
-          storageBucket: "unistock-pwa.firebasestorage.app",
-          messagingSenderId: "316393631480",
-          appId: "1:316393631480:web:44084208a9051d71b6950d"
+            apiKey: "AIzaSyBDfQ1h_JzLtPvKxOk-m1XCVcER8L_so7U",
+            authDomain: "unistock-pwa.firebaseapp.com",
+            projectId: "unistock-pwa",
+            storageBucket: "unistock-pwa.firebasestorage.app",
+            messagingSenderId: "316393631480",
+            appId: "1:316393631480:web:44084208a9051d71b6950d"
         };
-        
+
         let db, auth;
 
         window.onload = async () => {
@@ -21,14 +29,14 @@
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                
+
                 window.db = db;
                 window.auth = auth;
-                window.firebase = { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc }; 
-                
+                window.firebase = { collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc };
+
                 await signInAnonymously(auth);
                 console.log("✅ Conectado a Firebase");
-                
+
                 if (typeof window.initApp === 'function') window.initApp();
 
             } catch (error) {
@@ -38,6 +46,7 @@
         };
     </script>
 </head>
+
 <body>
     <div id="connection-toast" class="toast hidden">🔴 Sin Conexión - Modo Offline</div>
 
@@ -45,12 +54,12 @@
         <h1><img src="./images/utsjr_logo.png" alt="Logo" class="header-logo"> UniStock PWA</h1>
         <nav id="app-nav"></nav>
     </header>
-    
+
     <main id="content">
         <div id="login-container">
             <h2>Bienvenido a UniStock</h2>
             <p class="login-subtitle">Sistema de Inventario UTSJR</p>
-            
+
             <div class="login-card student-login">
                 <h3>👨‍🎓 Acceso Alumno</h3>
                 <input type="number" id="login-student-id" placeholder="Ingresa tu Matrícula" class="login-input">
@@ -72,4 +81,5 @@
     </footer>
     <script src="./js/app.js"></script>
 </body>
+
 </html>
