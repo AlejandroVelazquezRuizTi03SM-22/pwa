@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unistock-v8-offline-fix'; // Incrementamos versión para forzar actualización
+const CACHE_NAME = 'unistock-v9-offline-fix'; // Incrementamos versión para forzar actualización
 
 const urlsToCache = [
   './',
@@ -40,30 +40,39 @@ self.addEventListener('activate', event => {
   return self.clients.claim(); // Toma control de la página inmediatamente
 });
 
-// INTERCEPCIÓN DE RED (LA CORRECCIÓN ESTÁ AQUÍ)
+// INTERCEPCIÓN DE RED (MEJORADA)
 self.addEventListener('fetch', event => {
-  // Ignoramos peticiones que no sean GET (como las de Firebase o POST)
+  // Ignoramos peticiones que no sean GET
   if (event.request.method !== 'GET') return;
 
+  // Estrategia: Cache First, falling back to Network, falling back to Offline Page
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // 1. Si está en caché, devolverlo (Rápido y Offline)
-        if (response) {
-          return response;
+    (async () => {
+      try {
+        // 1. Intentar buscar en caché
+        const cachedResponse = await caches.match(event.request, { ignoreSearch: true });
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+
+        // 2. Si no está en caché, intentar red
+        const networkResponse = await fetch(event.request);
+        return networkResponse;
+
+      } catch (error) {
+        // 3. FALLBACK OFFLINE: Si falla la red (y no estaba en caché)
+        console.log('[SW] Fallo de red, intentando fallback offline para:', event.request.url);
+
+        // Si la petición es una navegación a una página (HTML)
+        if (event.request.mode === 'navigate' || 
+            (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
+            // Devolver siempre el index.html (App Shell)
+            const indexCache = await caches.match('./index.html');
+            return indexCache || caches.match('./'); // Intento doble por seguridad
         }
         
-        // 2. Si no está en caché, intentar red
-        return fetch(event.request).catch(() => {
-            // 3. FALLBACK OFFLINE: Si falla la red...
-            
-            // Si la petición es una navegación a una página (HTML)
-            if (event.request.mode === 'navigate' || 
-                (event.request.method === 'GET' && event.request.headers.get('accept').includes('text/html'))) {
-                // Devolver siempre el index.html (App Shell)
-                return caches.match('./index.html');
-            }
-        });
-      })
+        // Aquí podrías retornar una imagen placeholder si falla una imagen, etc.
+      }
+    })()
   );
 });

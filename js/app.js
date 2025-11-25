@@ -1,7 +1,7 @@
 // 1. CONFIGURACIÓN GLOBAL
 // --------------------------------------------------------------------------------
 const mainContent = document.getElementById('content');
-let currentUserRole = null; 
+let currentUserRole = null;
 let currentStudentId = localStorage.getItem('student_id') || '';
 
 const INVENTORY_KEY = 'unistock_inventory';
@@ -13,7 +13,7 @@ const ACTIVE_REQUEST_KEY = 'unistock_active_request'; // Para no perder el códi
 // --------------------------------------------------------------------------------
 function updateConnectionStatus() {
     const toast = document.getElementById('connection-toast');
-    if(!toast) return;
+    if (!toast) return;
 
     if (navigator.onLine) {
         toast.textContent = "🟢 Conexión Restablecida";
@@ -48,7 +48,7 @@ const getInventory = async () => {
     }
     // Fallback Offline
     const local = localStorage.getItem(INVENTORY_KEY);
-    const backup = [{ id: "demo", name: "Equipo Demo", description: "Ejemplo Offline", available: 10, total: 10, tags:["Lab"] }];
+    const backup = [{ id: "demo", name: "Equipo Demo", description: "Ejemplo Offline", available: 10, total: 10, tags: ["Lab"] }];
     return local ? JSON.parse(local) : backup;
 };
 
@@ -63,13 +63,13 @@ const saveCart = (c) => { localStorage.setItem(CART_KEY, JSON.stringify(c)); upd
 const addToCart = async (id) => {
     const inv = await getInventory();
     const prod = inv.find(p => p.id === id);
-    if(!prod) return alert("Producto no encontrado");
+    if (!prod) return alert("Producto no encontrado");
 
     let cart = getCart();
     let item = cart.find(i => i.id === id);
 
-    if(item) {
-        if(item.quantity < prod.available) { item.quantity++; alert("Cantidad +1"); }
+    if (item) {
+        if (item.quantity < prod.available) { item.quantity++; alert("Cantidad +1"); }
         else alert("Stock insuficiente");
     } else {
         cart.push({ id: prod.id, name: prod.name, quantity: 1, max: prod.available });
@@ -79,63 +79,67 @@ const addToCart = async (id) => {
 };
 
 const removeFromCart = (id) => {
-    if(!confirm("¿Eliminar?")) return;
+    if (!confirm("¿Eliminar?")) return;
     let cart = getCart().filter(i => i.id !== id);
     saveCart(cart);
-    if(document.getElementById('loan-form')) renderRequestForm();
+    if (document.getElementById('loan-form')) renderRequestForm();
 };
 const clearCart = () => { localStorage.removeItem(CART_KEY); updateCartUI(); };
 
 // --------------------------------------------------------------------------------
 // 5. SESIÓN Y NAVEGACIÓN
 // --------------------------------------------------------------------------------
-window.initApp = function() {
+window.initApp = function () {
     updateConnectionStatus();
-    if(localStorage.getItem('user_role')) {
-        currentUserRole = localStorage.getItem('user_role');
-        currentStudentId = localStorage.getItem('student_id') || '';
-        updateNav();
-    }
+    // SIEMPRE iniciar en login: Limpiamos rol y no restauramos sesión
+    localStorage.removeItem('user_role');
+    currentUserRole = null;
+    // No llamamos a updateNav() para que se quede en el HTML original (Login)
 };
 
 const updateNav = () => {
     const nav = document.getElementById('app-nav');
-    if(!nav) return;
+    if (!nav) return;
 
-    if(currentUserRole === 'admin') {
+    if (currentUserRole === 'admin') {
         nav.innerHTML = `
             <a href="#" onclick="navigateTo('admin_dashboard')">Dashboard</a>
             <a href="#" onclick="navigateTo('admin_inventory')">Inventario</a>
             <a href="#" onclick="navigateTo('admin_validate')">✅ Validar</a>
             <a href="#" onclick="navigateTo('admin_active_loans')">🔄 Activos</a>
             <a href="#" onclick="logout()" style="background-color:#D32F2F;">Salir</a>`;
-        if(document.getElementById('login-container')) navigateTo('admin_dashboard');
+        if (document.getElementById('login-container')) navigateTo('admin_dashboard');
     } else {
         nav.innerHTML = `
             <a href="#" onclick="navigateTo('student_consult')">Material</a>
             <a href="#" onclick="navigateTo('student_request_form')">Solicitud (${getCart().length})</a>
             <a href="#" onclick="navigateTo('student_history')">📜 Historial</a>
             <a href="#" onclick="logout()" style="background-color:#D32F2F;">Salir</a>`;
-        if(document.getElementById('login-container')) navigateTo('student_consult');
+        if (document.getElementById('login-container')) navigateTo('student_consult');
     }
 };
 
 window.login = (role) => {
     // LOGIN ADMIN (INPUTS)
-    if(role === 'admin') {
+    if (role === 'admin') {
         const passInput = document.getElementById('login-admin-pass');
         let password = passInput ? passInput.value : prompt("Contraseña:");
-        if(password !== "utsjr2025") return alert("Contraseña Incorrecta");
+        if (password !== "utsjr2025") return alert("Contraseña Incorrecta");
     }
-    
+
     // LOGIN ALUMNO (INPUTS)
-    if(role === 'student') {
+    if (role === 'student') {
         const idInput = document.getElementById('login-student-id');
         let matricula = idInput ? idInput.value.trim() : prompt("Matrícula:");
-        if(!matricula || matricula.length < 3) return alert("Matrícula inválida");
-        
+        if (!matricula || matricula.length < 3) return alert("Matrícula inválida");
+
         currentStudentId = matricula;
         localStorage.setItem('student_id', matricula);
+    }
+
+    // SOLICITAR PERMISO NOTIFICACIONES
+    if ('Notification' in window && Notification.permission !== 'granted') {
+        Notification.requestPermission();
     }
 
     currentUserRole = role;
@@ -144,7 +148,7 @@ window.login = (role) => {
 };
 
 window.logout = () => {
-    if(confirm("¿Cerrar sesión?")) {
+    if (confirm("¿Cerrar sesión?")) {
         currentUserRole = null;
         localStorage.removeItem('user_role');
         location.reload();
@@ -155,17 +159,17 @@ window.navigateTo = async (view) => {
     mainContent.innerHTML = "<div style='text-align:center; padding:50px;'><h2>Cargando...</h2></div>";
     await new Promise(r => setTimeout(r, 50));
 
-    switch(view) {
+    switch (view) {
         case 'student_consult': await renderStudentConsultation(); break;
         case 'student_request_form': renderRequestForm(); break;
         case 'student_history': await renderStudentHistory(); break;
         case 'student_active_token': renderActiveTokenView(); break;
-        
+
         case 'admin_dashboard': await renderAdminDashboard(); break;
         case 'admin_inventory': await renderAdminInventory(); break;
         case 'admin_validate': renderAdminValidate(); break;
         case 'admin_active_loans': await renderAdminActiveLoans(); break;
-        
+
         default: mainContent.innerHTML = "<h2>404</h2>";
     }
 };
@@ -175,7 +179,7 @@ window.navigateTo = async (view) => {
 // --------------------------------------------------------------------------------
 const renderStudentConsultation = async () => {
     const items = await getInventory();
-    
+
     // Botón Token Persistente
     const savedToken = localStorage.getItem(ACTIVE_REQUEST_KEY);
     let tokenBtn = '';
@@ -202,7 +206,7 @@ const renderStudentConsultation = async () => {
             <div class="material-card">
                 <h3>${i.name}</h3>
                 <p class="desc">${i.description || ''}</p>
-                <div class="tags-container">${i.tags ? i.tags.map(t=>`<span class="tag">${t}</span>`).join('') : ''}</div>
+                <div class="tags-container">${i.tags ? i.tags.map(t => `<span class="tag">${t}</span>`).join('') : ''}</div>
                 <p>Disp: <strong>${i.available}</strong> / ${i.total}</p>
                 ${i.available > 0 ? `<button onclick="addToCart('${i.id}')">Agregar</button>` : '<button disabled>Agotado</button>'}
             </div>`).join('') : "<p>Sin resultados</p>";
@@ -210,21 +214,21 @@ const renderStudentConsultation = async () => {
     draw(items);
     document.getElementById('search').addEventListener('input', (e) => {
         const q = e.target.value.toLowerCase();
-        draw(items.filter(i => i.name.toLowerCase().includes(q) || (i.tags && i.tags.some(t=>t.toLowerCase().includes(q)))));
+        draw(items.filter(i => i.name.toLowerCase().includes(q) || (i.tags && i.tags.some(t => t.toLowerCase().includes(q)))));
     });
     updateCartUI();
 };
 
 const updateCartUI = () => {
     const links = document.querySelectorAll('nav a');
-    if(links.length > 1 && currentUserRole === 'student') links[1].innerText = `Solicitud (${getCart().length})`;
+    if (links.length > 1 && currentUserRole === 'student') links[1].innerText = `Solicitud (${getCart().length})`;
     const fab = document.getElementById('fab-cart');
-    if(fab) fab.innerText = `📋 Ver Solicitud (${getCart().length})`;
+    if (fab) fab.innerText = `📋 Ver Solicitud (${getCart().length})`;
 };
 
 const renderRequestForm = () => {
     const cart = getCart();
-    if(cart.length === 0) return mainContent.innerHTML = "<div style='text-align:center; margin-top:50px;'><h2>Carrito vacío</h2><button class='btn-primary' onclick=\"navigateTo('student_consult')\">Ir al Inventario</button></div>";
+    if (cart.length === 0) return mainContent.innerHTML = "<div style='text-align:center; margin-top:50px;'><h2>Carrito vacío</h2><button class='btn-primary' onclick=\"navigateTo('student_consult')\">Ir al Inventario</button></div>";
     const today = new Date().toISOString().split('T')[0];
 
     mainContent.innerHTML = `
@@ -280,6 +284,15 @@ const renderRequestForm = () => {
         }
 
         localStorage.setItem(ACTIVE_REQUEST_KEY, JSON.stringify(tokenInfo));
+
+        // NOTIFICACIÓN LOCAL
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification("✅ Solicitud Generada", {
+                body: `Tu código ${tokenInfo.code || 'Offline'} está listo.`,
+                icon: './images/icon.png'
+            });
+        }
+
         clearCart();
         renderActiveTokenView();
     });
@@ -294,18 +307,18 @@ const renderActiveTokenView = () => {
 
     mainContent.innerHTML = `
         <div style="max-width:600px; margin:0 auto; background:white; padding:20px; border-radius:10px; text-align:center;">
-            <h2 style="color:${token.type==='online'?'#009688':'#E65100'}">
-                ${token.type==='online' ? '✅ Solicitud Enviada' : '⚠️ Token Offline'}
+            <h2 style="color:${token.type === 'online' ? '#009688' : '#E65100'}">
+                ${token.type === 'online' ? '✅ Solicitud Enviada' : '⚠️ Token Offline'}
             </h2>
             
-            ${token.type==='online' 
-                ? `<div class="big-code">${token.code}</div><p style="color:#666; margin-top:20px;">Guardado en la nube.</p>` 
-                : `<canvas id="qrcode" style="margin:15px auto;"></canvas><p style="color:#666;">Escanea este QR para validar.</p>`
-            }
+            ${token.type === 'online'
+            ? `<div class="big-code">${token.code}</div><p style="color:#666; margin-top:20px;">Guardado en la nube.</p>`
+            : `<canvas id="qrcode" style="margin:15px auto;"></canvas><p style="color:#666;">Escanea este QR para validar.</p>`
+        }
 
             <div style="background:#f9f9f9; padding:10px; text-align:left; margin-top:20px;">
                 <p><strong>Resumen:</strong></p>
-                <ul>${data.items.map(i=>`<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
+                <ul>${data.items.map(i => `<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
             </div>
 
             <button onclick="finishToken()" class="btn-secondary" style="margin-top:20px; color:#D32F2F; border-color:#D32F2F;">
@@ -314,13 +327,13 @@ const renderActiveTokenView = () => {
         </div>
     `;
 
-    if(token.type === 'offline' && window.QRCode) {
-        setTimeout(() => QRCode.toCanvas(document.getElementById('qrcode'), JSON.stringify(data), {width:250}), 100);
+    if (token.type === 'offline' && window.QRCode) {
+        setTimeout(() => QRCode.toCanvas(document.getElementById('qrcode'), JSON.stringify(data), { width: 250 }), 100);
     }
 };
 
 window.finishToken = () => {
-    if(confirm("¿Cerrar solicitud?")) {
+    if (confirm("¿Cerrar solicitud?")) {
         localStorage.removeItem(ACTIVE_REQUEST_KEY);
         navigateTo('student_consult');
     }
@@ -335,14 +348,14 @@ const renderStudentHistory = async () => {
             const q = query(collection(window.db, "loans"), where("studentId", "==", currentStudentId));
             const snap = await getDocs(q);
             const history = [];
-            snap.forEach(d => history.push({id:d.id, ...d.data()}));
-            history.sort((a,b) => b.timestamp - a.timestamp);
+            snap.forEach(d => history.push({ id: d.id, ...d.data() }));
+            history.sort((a, b) => b.timestamp - a.timestamp);
             mainContent.innerHTML = `<h2>Historial</h2>` + (history.length ? history.map(h => `
                 <div class="material-card history-card">
-                    <p><strong>${new Date(h.timestamp).toLocaleDateString()}</strong> - ${h.status==='active'?'En Curso':'Devuelto'}</p>
-                    <ul>${h.items.map(i=>`<li>${i.name} (x${i.quantity})</li>`).join('')}</ul>
+                    <p><strong>${new Date(h.timestamp).toLocaleDateString()}</strong> - ${h.status === 'active' ? 'En Curso' : 'Devuelto'}</p>
+                    <ul>${h.items.map(i => `<li>${i.name} (x${i.quantity})</li>`).join('')}</ul>
                 </div>`).join('') : "<p>Sin registros</p>");
-        } catch(e) { mainContent.innerHTML = `<p>Error conexión.</p>`; }
+        } catch (e) { mainContent.innerHTML = `<p>Error conexión.</p>`; }
     } else mainContent.innerHTML = `<p>No disponible offline.</p>`;
 };
 
@@ -367,13 +380,13 @@ const renderAdminValidate = () => {
 
 window.searchByCode = async () => {
     const code = document.getElementById('verify-code').value.toUpperCase().trim();
-    if(!code) return alert("Escribe código");
+    if (!code) return alert("Escribe código");
     if (navigator.onLine && window.db && window.firebase) {
         try {
             const { collection, query, where, getDocs } = window.firebase;
             const q = query(collection(window.db, "requests"), where("code", "==", code), where("status", "==", "pending"));
             const snap = await getDocs(q);
-            if (!snap.empty) showConfirmation({...snap.docs[0].data(), docId: snap.docs[0].id});
+            if (!snap.empty) showConfirmation({ ...snap.docs[0].data(), docId: snap.docs[0].id });
             else alert("Código no encontrado");
         } catch (e) { alert("Error conexión"); }
     } else alert("Necesitas internet");
@@ -386,7 +399,7 @@ const showConfirmation = (data) => {
             <h3>Confirmar Entrega</h3>
             <p><strong>${data.studentName}</strong> (${data.studentId})</p>
             <p>Aula: ${data.aula}</p>
-            <ul>${data.items.map(i=>`<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
+            <ul>${data.items.map(i => `<li>${i.name} x${i.quantity}</li>`).join('')}</ul>
             <button onclick="confirmLoan()" class="btn-primary" style="background:green; margin-top:15px;">ENTREGAR MATERIAL</button>
         </div>`;
 };
@@ -399,10 +412,10 @@ window.confirmLoan = async () => {
             for (let item of data.items) {
                 const ref = doc(window.db, "inventory", item.id);
                 const snap = await getDoc(ref);
-                if(snap.exists()) await updateDoc(ref, { available: snap.data().available - item.quantity });
+                if (snap.exists()) await updateDoc(ref, { available: snap.data().available - item.quantity });
             }
             await addDoc(collection(window.db, "loans"), { ...data, timestamp: Date.now(), status: 'active' });
-            if(data.docId) await deleteDoc(doc(window.db, "requests", data.docId));
+            if (data.docId) await deleteDoc(doc(window.db, "requests", data.docId));
             alert("Éxito"); navigateTo('admin_active_loans');
         } catch (e) { alert("Error BD"); }
     }
@@ -453,7 +466,7 @@ window.returnLoan = async (loanId) => {
 
 // --- DASHBOARD ---
 const renderAdminDashboard = async () => {
-    const barsHtml = [12,19,8,15,22].map((v,i) => `<div class="chart-bar-container"><div class="chart-bar ${i==4?'bar-peak':''}" style="height:${(v/22)*100}%;"><span class="chart-tooltip">${v}</span></div><span class="chart-label">${['L','M','M','J','V'][i]}</span></div>`).join('');
+    const barsHtml = [12, 19, 8, 15, 22].map((v, i) => `<div class="chart-bar-container"><div class="chart-bar ${i == 4 ? 'bar-peak' : ''}" style="height:${(v / 22) * 100}%;"><span class="chart-tooltip">${v}</span></div><span class="chart-label">${['L', 'M', 'M', 'J', 'V'][i]}</span></div>`).join('');
     const inv = await getInventory();
     const low = inv.filter(i => i.available < 2).length;
     mainContent.innerHTML = `
@@ -490,38 +503,38 @@ const renderAdminInventory = async () => {
                 <button onclick="addStockToProduct('${i.id}', '${i.name}')" style="width:auto; padding:5px; background:#0288D1; font-size:0.8em;">➕ Stock</button>
             </div>
             <p>Disp: ${i.available} / ${i.total}</p>
-            <div class="tags-container">${i.tags ? i.tags.map(t=>`<span class="tag">${t}</span>`).join('') : ''}</div>
+            <div class="tags-container">${i.tags ? i.tags.map(t => `<span class="tag">${t}</span>`).join('') : ''}</div>
         </div>`).join('');
-    
+
     document.getElementById('add-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const newItem = {
             name: document.getElementById('m-name').value, description: document.getElementById('m-desc').value,
             total: parseInt(document.getElementById('m-total').value), available: parseInt(document.getElementById('m-total').value),
-            tags: document.getElementById('m-tags').value.split(',').map(t=>t.trim())
+            tags: document.getElementById('m-tags').value.split(',').map(t => t.trim())
         };
-        if(navigator.onLine && window.db) {
-             try { await window.firebase.addDoc(window.firebase.collection(window.db, "inventory"), newItem); alert("Guardado"); await renderAdminInventory(); } 
-             catch(err) { alert("Error"); }
+        if (navigator.onLine && window.db) {
+            try { await window.firebase.addDoc(window.firebase.collection(window.db, "inventory"), newItem); alert("Guardado"); await renderAdminInventory(); }
+            catch (err) { alert("Error"); }
         } else alert("Requiere internet");
     });
 };
 
 window.addStockToProduct = async (id, name) => {
     const q = prompt(`Añadir stock a ${name}:`);
-    if(!q) return;
+    if (!q) return;
     const qty = parseInt(q);
-    if(qty > 0 && navigator.onLine && window.db) {
+    if (qty > 0 && navigator.onLine && window.db) {
         try {
             const ref = window.firebase.doc(window.db, "inventory", id);
             const snap = await window.firebase.getDoc(ref);
-            if(snap.exists()) {
+            if (snap.exists()) {
                 await window.firebase.updateDoc(ref, { total: snap.data().total + qty, available: snap.data().available + qty });
                 alert("Stock actualizado"); renderAdminInventory();
             }
-        } catch(e) { alert("Error"); }
+        } catch (e) { alert("Error"); }
     } else alert("Error");
 };
 
 // 8. SERVICE WORKER
-if('serviceWorker' in navigator) window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js'));
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
