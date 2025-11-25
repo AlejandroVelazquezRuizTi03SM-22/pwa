@@ -4,20 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniStock PWA | Inventario UTSJR</title>
-    
-    <link rel="manifest" href="./manifest.json">
-    <link rel="icon" type="image/png" href="./images/icon.png">
-    <meta name="theme-color" content="#1A237E"> 
-    <link rel="stylesheet" href="./css/style.css">
-    
-    <!-- LIBRERÍA QR (Requerida para modo offline) -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-
-    <!-- FIREBASE SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, getDocs, addDoc, doc, getDoc, updateDoc, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
           apiKey: "AIzaSyBDfQ1h_JzLtPvKxOk-m1XCVcER8L_so7U",

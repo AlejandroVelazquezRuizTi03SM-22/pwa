@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unistock-v11-fix-paths'; // Incrementamos versión
+const CACHE_NAME = 'unistock-v12-no-qr'; // Incrementamos versión
 
 const urlsToCache = [
   '/',
