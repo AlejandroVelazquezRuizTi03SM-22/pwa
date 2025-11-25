@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unistock-v10-offline-fix'; // Incrementamos versión
+const CACHE_NAME = 'unistock-v11-fix-paths'; // Incrementamos versión
 
 const urlsToCache = [
   '/',
@@ -7,7 +7,7 @@ const urlsToCache = [
   '/js/app.js',
   '/manifest.json',
   '/images/icon.png',
-  '/images/utsjr_logo.png'
+  '/images/utsjr.png'
 ];
 
 // INSTALACIÓN
@@ -71,6 +71,9 @@ self.addEventListener('fetch', event => {
           const cachedIndex = await cache.match('/index.html');
           return cachedIndex || cache.match('/');
         }
+
+        // Para otros recursos, devolver un error 404 o una respuesta vacía válida para evitar "Failed to convert value to 'Response'"
+        return new Response('Offline', { status: 404, statusText: 'Offline' });
       }
     })()
   );
